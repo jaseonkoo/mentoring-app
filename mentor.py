@@ -20,7 +20,7 @@ scope = [
 @st.cache_resource # 컴퓨터가 로그인 과정을 매번 반복하지 않게 기억해둡니다.
 def init_gspread():
     # 1. 아까 이름 바꾼 secrets.json 파일로 로그인합니다.
-    creds = ServiceAccountCredentials.from_json_keyfile_name("secrets.json", scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
     client = gspread.authorize(creds)
     
     # 2. '멘토링예약DB' 문서를 엽니다.
@@ -282,3 +282,4 @@ with tab1:
                     
                     st.success("🎉 예약 신청이 완료되었습니다! 멘토의 승인을 기다려주세요.")
                     send_email(mentor_info[selected_mentor]["email"], f"[신규 예약] {mentee_name}님", "새로운 신청 확인 요망")
+
