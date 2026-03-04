@@ -8,7 +8,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 st.set_page_config(page_title="사내 멘토링 예약", page_icon="🤝", layout="wide")
 
 # ==========================================
-# ☁️ [핵심 1] 구글 스프레드시트 로그인 & 연결
+# ☁️ [핵심 1] 구글 스프레드시트 연결 및 탭 생성
 # ==========================================
 scope = [
     "https://spreadsheets.google.com/feeds",
@@ -17,37 +17,50 @@ scope = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-@st.cache_resource # 컴퓨터가 로그인 과정을 매번 반복하지 않게 기억해둡니다.
+@st.cache_resource
 def init_gspread():
-    # 1. 아까 이름 바꾼 secrets.json 파일로 로그인합니다.
     creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
     client = gspread.authorize(creds)
-    
-    # 2. '멘토링예약DB' 문서를 엽니다.
     doc = client.open("멘토링예약DB")
     
-    # 3. 데이터가 저장될 두 개의 탭(워크시트)을 찾습니다. 없으면 자동으로 만듭니다!
-    try:
-        ws_slots = doc.worksheet("slots")
-    except gspread.exceptions.WorksheetNotFound:
-        ws_slots = doc.add_worksheet(title="slots", rows="1000", cols="20")
+    # 탭이 없으면 자동으로 만듭니다 (기존 slots, reservations 외에 admin, mentors 추가)
+    try: ws_slots = doc.worksheet("slots")
+    except: ws_slots = doc.add_worksheet(title="slots", rows="1000", cols="20")
         
-    try:
-        ws_res = doc.worksheet("reservations")
-    except gspread.exceptions.WorksheetNotFound:
-        ws_res = doc.add_worksheet(title="reservations", rows="1000", cols="20")
+    try: ws_res = doc.worksheet("reservations")
+    except: ws_res = doc.add_worksheet(title="reservations", rows="1000", cols="20")
         
-    return ws_slots, ws_res
+    try: ws_mentors = doc.worksheet("mentors")
+    except: ws_mentors = doc.add_worksheet(title="mentors", rows="100", cols="5")
+        
+    try: ws_admin = doc.worksheet("admin")
+    except: ws_admin = doc.add_worksheet(title="admin", rows="10", cols="2")
+        
+    return ws_slots, ws_res, ws_mentors, ws_admin
 
-# 봇(Bot) 출입증으로 문서 열기 완료!
-ws_slots, ws_res = init_gspread()
-
+ws_slots, ws_res, ws_mentors, ws_admin = init_gspread()
 
 # ==========================================
-# 💾 [핵심 2] 데이터 불러오기 및 저장하기 함수
+# 💾 [핵심 2] 데이터 불러오기 및 저장 함수
 # ==========================================
 def load_data():
-    # 1. 멘토 일정(slots) 불러오기
+    # 1. 관리자 정보 불러오기 (없으면 기본값 셋팅)
+    try:
+        admin_records = ws_admin.get_all_records()
+        if admin_records:
+            st.session_state.admin_info = admin_records[0]
+        else:
+            st.session_state.admin_info = {"id": "admin", "pw": "dhfeed1947"}
+    except:
+        st.session_state.admin_info = {"id": "admin", "pw": "dhfeed1947"}
+
+    # 2. 멘토 정보 불러오기 (없으면 빈 리스트)
+    try:
+        st.session_state.mentors_data = ws_mentors.get_all_records()
+    except:
+        st.session_state.mentors_data = []
+
+    # 3. 멘토 일정 불러오기
     try:
         slots_records = ws_slots.get_all_records()
         for r in slots_records:
@@ -58,7 +71,7 @@ def load_data():
     except:
         st.session_state.available_slots = []
 
-    # 2. 예약 내역(reservations) 불러오기
+    # 4. 예약 내역 불러오기
     try:
         res_records = ws_res.get_all_records()
         for r in res_records:
@@ -69,127 +82,244 @@ def load_data():
     except:
         st.session_state.reservations = []
 
+def save_admin():
+    df = pd.DataFrame([st.session_state.admin_info])
+    ws_admin.clear()
+    ws_admin.update([df.columns.values.tolist()] + df.values.tolist())
+
+def save_mentors():
+    ws_mentors.clear()
+    if st.session_state.mentors_data:
+        df = pd.DataFrame(st.session_state.mentors_data)
+        ws_mentors.update([df.columns.values.tolist()] + df.values.tolist())
+
 def save_slots():
+    ws_slots.clear()
     if len(st.session_state.available_slots) > 0:
         df = pd.DataFrame(st.session_state.available_slots)
         df['date'] = df['date'].astype(str)
         df['start'] = df['start'].astype(str)
         df['end'] = df['end'].astype(str)
-        # 구글 시트를 싹 지우고 새롭게 업데이트된 표를 덮어씁니다.
-        ws_slots.clear()
         ws_slots.update([df.columns.values.tolist()] + df.values.tolist())
 
 def save_reservations():
+    ws_res.clear()
     if len(st.session_state.reservations) > 0:
         df = pd.DataFrame(st.session_state.reservations)
         df['date'] = df['date'].astype(str)
         df['start_time'] = df['start_time'].astype(str)
         df['end_time'] = df['end_time'].astype(str)
-        ws_res.clear()
         ws_res.update([df.columns.values.tolist()] + df.values.tolist())
 
-
-# 프로그램이 처음 켜질 때 구글에서 데이터를 싹 읽어옵니다.
 if "data_loaded" not in st.session_state:
     load_data()
     st.session_state.data_loaded = True
 
-
-# ==========================================
-# 이하 화면 구성 (이전과 똑같이 잘 작동합니다!)
-# ==========================================
 def send_email(to_email, subject, body):
     st.toast(f"📧 [메일 발송] {to_email}\n제목: {subject}", icon="✉️")
 
-mentors = ["선택해주세요", "김철수 부장", "이영희 차장", "박민수 과장"]
-mentor_info = {
-    "김철수 부장": {"pw": "1111", "email": "kim@company.kr"},
-    "이영희 차장": {"pw": "2222", "email": "lee@company.kr"},
-    "박민수 과장": {"pw": "3333", "email": "park@company.kr"}
-}
+# 화면에 보여줄 멘토 이름 리스트 (구글 시트에서 실시간으로 가져옵니다)
+mentor_names_list = ["선택해주세요"] + [m['name'] for m in st.session_state.mentors_data]
 
-tab1, tab2, tab3 = st.tabs(["🙋‍♂️ 멘티 예약 신청", "💼 멘토 일정 등록", "📋 멘토 예약 관리 (승인)"])
+# ==========================================
+# 탭 구성 (관리자 탭 추가)
+# ==========================================
+tab1, tab2, tab3, tab4 = st.tabs(["🙋‍♂️ 멘티 예약 신청", "💼 멘토 일정 관리", "📋 멘토 예약 승인", "👑 관리자 메뉴"])
 
-# 탭 3: 예약 관리 (승인)
-with tab3:
-    st.subheader("📋 멘토 예약 현황 및 승인")
-    mentor_name_tab3 = st.selectbox("본인(멘토) 이름 선택", mentors, key="mentor_select_tab3")
+# ==========================================
+# 👑 탭 4: 관리자 메뉴
+# ==========================================
+with tab4:
+    st.subheader("👑 시스템 관리자 메뉴")
     
-    if mentor_name_tab3 != "선택해주세요":
-        input_pw_tab3 = st.text_input("비밀번호 4자리 입력", type="password", key="pw_tab3")
-        
-        if input_pw_tab3 == mentor_info[mentor_name_tab3]["pw"]:
-            st.success(f"{mentor_name_tab3}님의 예약 관리 화면입니다.")
-            st.markdown("---")
-            
-            my_reservations = [r for r in st.session_state.reservations if r["mentor"] == mentor_name_tab3]
-            
-            if not my_reservations:
-                st.write("현재 들어온 예약 신청이 없습니다.")
-            else:
-                for res in my_reservations:
-                    with st.container():
-                        st.write(f"**[{res['status']}] 📅 {res['date']} ⏰ {res['start_time'].strftime('%H:%M')} ~ {res['end_time'].strftime('%H:%M')}**")
-                        st.write(f"- **신청자:** {res['mentee_name']} ({res['mentee_email']})")
-                        st.write(f"- **사전 질문:** {res['topic']}")
-                        
-                        if res['status'] == "대기중":
-                            col_btn1, col_btn2 = st.columns([1, 10])
-                            with col_btn1:
-                                if st.button("✅ 승인", key=f"app_{res['id']}"):
-                                    res['status'] = "승인됨"
-                                    save_reservations() # ☁️ 구글 시트에 바로 동기화!
-                                    send_email(res['mentee_email'], "[멘토링 확정] 예약이 승인되었습니다.", "상담이 확정되었습니다.")
-                                    send_email(mentor_info[mentor_name_tab3]["email"], "[일정 확정] 멘토링 확정", "내 일정에 추가되었습니다.")
-                                    st.rerun()
-                            with col_btn2:
-                                if st.button("❌ 거절", key=f"rej_{res['id']}"):
-                                    res['status'] = "거절됨"
-                                    save_reservations() # ☁️ 구글 시트에 바로 동기화!
-                                    send_email(res['mentee_email'], "[멘토링 안내] 예약이 거절되었습니다.", "다른 일정을 선택해주세요.")
-                                    st.rerun()
-                        st.markdown("---")
-        elif input_pw_tab3 != "":
-            st.error("비밀번호가 틀렸습니다.")
+    # 로그인 화면
+    if "admin_logged_in" not in st.session_state:
+        st.session_state.admin_logged_in = False
 
-# 탭 2: 멘토 일정 등록
+    if not st.session_state.admin_logged_in:
+        admin_id = st.text_input("관리자 아이디")
+        admin_pw = st.text_input("관리자 비밀번호", type="password")
+        if st.button("로그인", key="admin_login"):
+            if admin_id == st.session_state.admin_info["id"] and admin_pw == str(st.session_state.admin_info["pw"]):
+                st.session_state.admin_logged_in = True
+                st.rerun()
+            else:
+                st.error("아이디 또는 비밀번호가 틀렸습니다.")
+    
+    # 로그인 성공 후 화면
+    else:
+        st.success("✅ 관리자로 로그인되었습니다.")
+        if st.button("로그아웃"):
+            st.session_state.admin_logged_in = False
+            st.rerun()
+            
+        st.markdown("---")
+        
+        # 1. 관리자 비밀번호 변경
+        with st.expander("🔑 관리자 비밀번호 변경", expanded=False):
+            new_admin_pw = st.text_input("새 관리자 비밀번호", type="password")
+            if st.button("관리자 비밀번호 업데이트"):
+                if new_admin_pw:
+                    st.session_state.admin_info["pw"] = new_admin_pw
+                    save_admin()
+                    st.success("관리자 비밀번호가 성공적으로 변경되었습니다!")
+                else:
+                    st.warning("비밀번호를 입력해주세요.")
+                    
+        # 2. 신규 멘토 등록
+        with st.expander("👨‍🏫 신규 멘토 등록", expanded=True):
+            col_m1, col_m2, col_m3 = st.columns(3)
+            with col_m1: new_m_name = st.text_input("멘토 이름 (예: 홍길동 부장)")
+            with col_m2: new_m_pw = st.text_input("초기 비밀번호 (숫자 등)")
+            with col_m3: new_m_email = st.text_input("멘토 이메일")
+            
+            if st.button("새 멘토 추가하기"):
+                if new_m_name and new_m_pw:
+                    # 중복 확인
+                    if any(m['name'] == new_m_name for m in st.session_state.mentors_data):
+                        st.error("이미 등록된 멘토 이름입니다.")
+                    else:
+                        st.session_state.mentors_data.append({"name": new_m_name, "pw": str(new_m_pw), "email": new_m_email})
+                        save_mentors()
+                        st.success(f"'{new_m_name}' 멘토가 등록되었습니다!")
+                        st.rerun()
+                else:
+                    st.warning("이름과 비밀번호는 필수입니다.")
+
+        # 3. 등록된 멘토 관리 (비밀번호 변경 및 삭제)
+        with st.expander("📋 등록된 멘토 관리 (비번 변경/삭제)", expanded=True):
+            if not st.session_state.mentors_data:
+                st.info("등록된 멘토가 없습니다.")
+            else:
+                for i, m in enumerate(st.session_state.mentors_data):
+                    col1, col2, col3, col4 = st.columns([2, 2, 3, 1])
+                    with col1: st.write(f"**{m['name']}**")
+                    with col2: 
+                        update_pw = st.text_input("비번 변경", value=m['pw'], key=f"pw_{i}", type="password")
+                    with col3:
+                        update_email = st.text_input("이메일 변경", value=m.get('email', ''), key=f"em_{i}")
+                    with col4:
+                        if st.button("저장", key=f"save_m_{i}"):
+                            st.session_state.mentors_data[i]['pw'] = str(update_pw)
+                            st.session_state.mentors_data[i]['email'] = update_email
+                            save_mentors()
+                            st.success("수정됨!")
+                        if st.button("삭제", key=f"del_m_{i}"):
+                            st.session_state.mentors_data.pop(i)
+                            save_mentors()
+                            st.rerun()
+                    st.divider()
+
+# ==========================================
+# 💼 탭 2: 멘토 일정 관리 (등록/수정/삭제)
+# ==========================================
 with tab2:
-    st.subheader("💼 멘토 일정 등록 (예약 가능 시간 열기)")
-    mentor_name_tab2 = st.selectbox("본인(멘토) 이름 선택", mentors, key="mentor_select_tab2")
+    st.subheader("💼 멘토 일정 관리 (등록 및 삭제)")
+    mentor_name_tab2 = st.selectbox("본인(멘토) 이름 선택", mentor_names_list, key="mentor_select_tab2")
     
     if mentor_name_tab2 != "선택해주세요":
-        input_pw_tab2 = st.text_input("비밀번호 4자리", type="password", key="pw_tab2")
+        # 현재 선택된 멘토의 비밀번호 찾기
+        current_mentor = next((m for m in st.session_state.mentors_data if m["name"] == mentor_name_tab2), None)
         
-        if input_pw_tab2 == mentor_info[mentor_name_tab2]["pw"]:
-            col_date, col_start, col_end = st.columns(3)
-            with col_date:
-                avail_date = st.date_input("상담 가능한 날짜", datetime.date.today())
-            with col_start:
-                start_time = st.time_input("오픈 시작 시간", datetime.time(13, 0))
-            with col_end:
-                end_time = st.time_input("오픈 종료 시간", datetime.time(17, 0))
+        if current_mentor:
+            input_pw_tab2 = st.text_input("비밀번호 입력", type="password", key="pw_tab2")
+            
+            if input_pw_tab2 == str(current_mentor["pw"]):
+                st.success(f"{mentor_name_tab2}님, 환영합니다!")
                 
-            if st.button("✅ 이 시간 예약 가능으로 열기"):
-                if start_time >= end_time:
-                    st.error("⚠️ 종료 시간은 시작 시간보다 늦어야 합니다!")
-                else:
-                    slot_info = {"mentor": mentor_name_tab2, "date": avail_date, "start": start_time, "end": end_time}
-                    if slot_info not in st.session_state.available_slots:
-                        st.session_state.available_slots.append(slot_info)
-                        save_slots() # ☁️ 구글 시트에 바로 동기화!
-                        st.success(f"{avail_date} 일정이 성공적으로 추가되었습니다!")
+                # 1. 새 일정 추가
+                st.markdown("#### ✨ 새로운 상담 시간 열기")
+                col_date, col_start, col_end = st.columns(3)
+                with col_date: avail_date = st.date_input("상담 가능한 날짜", datetime.date.today())
+                with col_start: start_time = st.time_input("오픈 시작 시간", datetime.time(13, 0))
+                with col_end: end_time = st.time_input("오픈 종료 시간", datetime.time(17, 0))
+                    
+                if st.button("✅ 이 시간 예약 가능으로 열기"):
+                    if start_time >= end_time:
+                        st.error("⚠️ 종료 시간은 시작 시간보다 늦어야 합니다!")
                     else:
-                        st.warning("이미 등록된 시간입니다.")
+                        slot_info = {"mentor": mentor_name_tab2, "date": avail_date, "start": start_time, "end": end_time}
+                        if slot_info not in st.session_state.available_slots:
+                            st.session_state.available_slots.append(slot_info)
+                            save_slots() 
+                            st.success(f"{avail_date} 일정이 성공적으로 추가되었습니다!")
+                            st.rerun()
+                        else:
+                            st.warning("이미 등록된 시간입니다.")
 
-            st.write("---")
-            st.write(f"**[{mentor_name_tab2}] 님이 열어둔 일정**")
-            for slot in st.session_state.available_slots:
-                if slot["mentor"] == mentor_name_tab2:
-                    st.write(f"- 📅 {slot['date']} ⏰ {slot['start'].strftime('%H:%M')} ~ {slot['end'].strftime('%H:%M')}")
-        elif input_pw_tab2 != "":
-            st.error("비밀번호가 틀렸습니다.")
+                st.markdown("---")
+                
+                # 2. 기존 일정 확인 및 삭제 (수정 기능 대체)
+                st.markdown("#### 🗑️ 내가 열어둔 일정 관리")
+                st.caption("※ 일정을 수정하려면 기존 일정을 [삭제]한 뒤 새로 [추가]해 주세요.")
+                
+                my_slots = [s for s in st.session_state.available_slots if s["mentor"] == mentor_name_tab2]
+                
+                if not my_slots:
+                    st.info("등록해둔 일정이 없습니다.")
+                else:
+                    for i, slot in enumerate(my_slots):
+                        col_info, col_btn = st.columns([4, 1])
+                        with col_info:
+                            st.write(f"📅 **{slot['date']}** ⏰ {slot['start'].strftime('%H:%M')} ~ {slot['end'].strftime('%H:%M')}")
+                        with col_btn:
+                            if st.button("❌ 삭제", key=f"del_slot_{slot['date']}_{slot['start']}"):
+                                st.session_state.available_slots.remove(slot)
+                                save_slots() # 구글 시트에서 즉시 삭제!
+                                st.success("일정이 삭제되었습니다.")
+                                st.rerun()
+                        st.divider()
+                        
+            elif input_pw_tab2 != "":
+                st.error("비밀번호가 틀렸습니다.")
 
-# 탭 1: 멘티 예약 신청
+# ==========================================
+# 📋 탭 3: 멘토 예약 관리 (승인)
+# ==========================================
+with tab3:
+    st.subheader("📋 멘토 예약 현황 및 승인")
+    mentor_name_tab3 = st.selectbox("본인(멘토) 이름 선택", mentor_names_list, key="mentor_select_tab3")
+    
+    if mentor_name_tab3 != "선택해주세요":
+        current_mentor = next((m for m in st.session_state.mentors_data if m["name"] == mentor_name_tab3), None)
+        if current_mentor:
+            input_pw_tab3 = st.text_input("비밀번호 입력", type="password", key="pw_tab3")
+            
+            if input_pw_tab3 == str(current_mentor["pw"]):
+                st.success(f"{mentor_name_tab3}님의 예약 관리 화면입니다.")
+                st.markdown("---")
+                
+                my_reservations = [r for r in st.session_state.reservations if r["mentor"] == mentor_name_tab3]
+                
+                if not my_reservations:
+                    st.write("현재 들어온 예약 신청이 없습니다.")
+                else:
+                    for res in my_reservations:
+                        with st.container():
+                            st.write(f"**[{res['status']}] 📅 {res['date']} ⏰ {res['start_time'].strftime('%H:%M')} ~ {res['end_time'].strftime('%H:%M')}**")
+                            st.write(f"- **신청자:** {res['mentee_name']} ({res['mentee_email']})")
+                            st.write(f"- **사전 질문:** {res['topic']}")
+                            
+                            if res['status'] == "대기중":
+                                col_btn1, col_btn2 = st.columns([1, 10])
+                                with col_btn1:
+                                    if st.button("✅ 승인", key=f"app_{res['id']}"):
+                                        res['status'] = "승인됨"
+                                        save_reservations() 
+                                        send_email(res['mentee_email'], "[멘토링 확정] 예약 승인", "상담이 확정되었습니다.")
+                                        st.rerun()
+                                with col_btn2:
+                                    if st.button("❌ 거절", key=f"rej_{res['id']}"):
+                                        res['status'] = "거절됨"
+                                        save_reservations() 
+                                        st.rerun()
+                            st.markdown("---")
+            elif input_pw_tab3 != "":
+                st.error("비밀번호가 틀렸습니다.")
+
+# ==========================================
+# 🙋‍♂️ 탭 1: 멘티 예약 신청
+# ==========================================
 with tab1:
     st.subheader("🙋‍♂️ 원하시는 멘토와 시간을 선택해 주세요.")
     
@@ -201,8 +331,7 @@ with tab1:
         for slot in st.session_state.available_slots:
             m_name = slot["mentor"]
             d_str = slot["date"].strftime("%m월 %d일")
-            if m_name not in summary:
-                summary[m_name] = set()
+            if m_name not in summary: summary[m_name] = set()
             summary[m_name].add(d_str)
         
         for m_name, dates in summary.items():
@@ -211,11 +340,11 @@ with tab1:
     
     mentee_name = st.text_input("신청자(멘티) 이름")
     mentee_email = st.text_input("신청자 이메일 주소")
-    selected_mentor = st.selectbox("1. 멘토 선택", mentors, key="mentee_select")
+    selected_mentor = st.selectbox("1. 멘토 선택", mentor_names_list, key="mentee_select")
     
     col1, col2 = st.columns(2)
     with col1:
-        selected_date = st.date_input("2. 희망 날짜 선택 (위 안내판을 참고하세요!)", datetime.date.today() + datetime.timedelta(days=1), key="mentee_date")
+        selected_date = st.date_input("2. 희망 날짜 선택 (위 안내판 참고)", datetime.date.today() + datetime.timedelta(days=1), key="mentee_date")
         
     with col2:
         available_blocks = [s for s in st.session_state.available_slots if s["mentor"] == selected_mentor and s["date"] == selected_date]
@@ -230,13 +359,10 @@ with tab1:
                 st.write(f"▶ 멘토 오픈 시간: **{b['start'].strftime('%H:%M')} ~ {b['end'].strftime('%H:%M')}**")
             
             col_s, col_e = st.columns(2)
-            with col_s:
-                mentee_start = st.time_input("3. 상담 시작 시간", available_blocks[0]['start'], key="m_start")
-            with col_e:
-                mentee_end = st.time_input("4. 상담 종료 시간", available_blocks[0]['end'], key="m_end")
+            with col_s: mentee_start = st.time_input("3. 상담 시작 시간", available_blocks[0]['start'], key="m_start")
+            with col_e: mentee_end = st.time_input("4. 상담 종료 시간", available_blocks[0]['end'], key="m_end")
 
     mentoring_topic = st.text_area("5. 멘토링 사전 질문 (필수)", placeholder="어떤 조언이 필요하신가요?")
-
     st.markdown("---")
 
     if st.button("예약 신청하기", type="primary"): 
@@ -267,19 +393,10 @@ with tab1:
                     st.error("🚫 죄송합니다. 선택하신 시간에 이미 다른 분의 예약이 존재합니다. 다른 시간을 선택해주세요.")
                 else:
                     new_reservation = {
-                        "id": str(uuid.uuid4()),
-                        "mentor": selected_mentor,
-                        "mentee_name": mentee_name,
-                        "mentee_email": mentee_email,
-                        "date": selected_date,
-                        "start_time": mentee_start,
-                        "end_time": mentee_end,
-                        "topic": mentoring_topic,
-                        "status": "대기중"
+                        "id": str(uuid.uuid4()), "mentor": selected_mentor, "mentee_name": mentee_name,
+                        "mentee_email": mentee_email, "date": selected_date, "start_time": mentee_start,
+                        "end_time": mentee_end, "topic": mentoring_topic, "status": "대기중"
                     }
                     st.session_state.reservations.append(new_reservation)
-                    save_reservations() # ☁️ 구글 시트에 바로 동기화!
-                    
+                    save_reservations() 
                     st.success("🎉 예약 신청이 완료되었습니다! 멘토의 승인을 기다려주세요.")
-                    send_email(mentor_info[selected_mentor]["email"], f"[신규 예약] {mentee_name}님", "새로운 신청 확인 요망")
-
