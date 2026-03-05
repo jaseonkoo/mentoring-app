@@ -198,7 +198,7 @@ with tab4:
                             save_mentors()
                             st.success("수정됨!")
                             
-                        # [업데이트] 멘토 삭제 시 관련 일정과 예약도 함께 삭제
+                        # 멘토 삭제 시 관련 일정과 예약도 함께 삭제
                         if st.button("삭제", key=f"del_m_{i}"):
                             deleted_name = st.session_state.mentors_data[i]['name']
                             
@@ -328,15 +328,37 @@ with tab1:
     if len(st.session_state.available_slots) == 0:
         st.info("현재 열려있는 멘토링 일정이 없습니다. 멘토가 일정을 등록할 때까지 기다려주세요.")
     else:
-        summary = {}
+        # [업데이트] 예약이 모두 찬 날짜는 안내판에서 제거하기 위한 로직
+        avail_dict = {}
         for slot in st.session_state.available_slots:
-            m_name = slot["mentor"]
-            d_str = slot["date"].strftime("%m월 %d일")
-            if m_name not in summary: summary[m_name] = set()
-            summary[m_name].add(d_str)
+            key = (slot["mentor"], slot["date"])
+            dummy = datetime.date(2000, 1, 1)
+            s_dt = datetime.datetime.combine(dummy, slot["start"])
+            e_dt = datetime.datetime.combine(dummy, slot["end"])
+            avail_dict[key] = avail_dict.get(key, 0) + (e_dt - s_dt).total_seconds() / 60.0
+            
+        booked_dict = {}
+        for res in st.session_state.reservations:
+            if res["status"] != "거절됨":
+                key = (res["mentor"], res["date"])
+                dummy = datetime.date(2000, 1, 1)
+                s_dt = datetime.datetime.combine(dummy, res["start_time"])
+                e_dt = datetime.datetime.combine(dummy, res["end_time"])
+                booked_dict[key] = booked_dict.get(key, 0) + (e_dt - s_dt).total_seconds() / 60.0
+
+        summary = {}
+        for (m_name, d_obj), total_avail in avail_dict.items():
+            total_booked = booked_dict.get((m_name, d_obj), 0)
+            if total_avail > total_booked:
+                d_str = d_obj.strftime("%m월 %d일")
+                if m_name not in summary: summary[m_name] = set()
+                summary[m_name].add(d_str)
         
-        for m_name, dates in summary.items():
-            st.success(f"**{m_name}** : {', '.join(sorted(list(dates)))} 오픈됨")
+        if not summary:
+            st.info("현재 모든 멘토의 일정이 예약 마감되었습니다. 다음 일정을 기다려주세요.")
+        else:
+            for m_name, dates in summary.items():
+                st.success(f"**{m_name}** : {', '.join(sorted(list(dates)))} 예약 가능")
     st.markdown("---")
     
     mentee_name = st.text_input("신청자(멘티) 이름")
@@ -359,7 +381,7 @@ with tab1:
             for b in available_blocks:
                 st.write(f"▶ 멘토 오픈 시간: **{b['start'].strftime('%H:%M')} ~ {b['end'].strftime('%H:%M')}**")
             
-            # [업데이트] 이미 예약된 시간 보여주기
+            # [업데이트] 이미 예약된 시간 경고 표시
             booked_times = [r for r in st.session_state.reservations if r['mentor'] == selected_mentor and r['date'] == selected_date and r['status'] != "거절됨"]
             
             if booked_times:
