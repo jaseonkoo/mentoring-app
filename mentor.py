@@ -19,12 +19,10 @@ scope = [
 
 @st.cache_resource
 def init_gspread():
-    # Secrets 금고에서 구글 마스터키를 꺼내옵니다.
     creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
     client = gspread.authorize(creds)
     doc = client.open("멘토링예약DB")
     
-    # 탭이 없으면 자동으로 만듭니다
     try: ws_slots = doc.worksheet("slots")
     except: ws_slots = doc.add_worksheet(title="slots", rows="1000", cols="20")
         
@@ -45,7 +43,6 @@ ws_slots, ws_res, ws_mentors, ws_admin = init_gspread()
 # 💾 [핵심 2] 데이터 불러오기 및 저장 함수
 # ==========================================
 def load_data():
-    # 1. 관리자 정보
     try:
         admin_records = ws_admin.get_all_records()
         if admin_records:
@@ -55,13 +52,11 @@ def load_data():
     except:
         st.session_state.admin_info = {"id": "admin", "pw": "dhfeed1947"}
 
-    # 2. 멘토 정보
     try:
         st.session_state.mentors_data = ws_mentors.get_all_records()
     except:
         st.session_state.mentors_data = []
 
-    # 3. 멘토 일정
     try:
         slots_records = ws_slots.get_all_records()
         for r in slots_records:
@@ -72,7 +67,6 @@ def load_data():
     except:
         st.session_state.available_slots = []
 
-    # 4. 예약 내역
     try:
         res_records = ws_res.get_all_records()
         for r in res_records:
@@ -122,9 +116,9 @@ def send_email(to_email, subject, body):
 mentor_names_list = ["선택해주세요"] + [m['name'] for m in st.session_state.mentors_data]
 
 # ==========================================
-# 탭 구성 
+# 탭 구성 (메뉴 이름 변경)
 # ==========================================
-tab1, tab2, tab3, tab4 = st.tabs(["🙋‍♂️ 멘티 예약 신청", "💼 멘토 일정 관리", "📋 멘토 예약 승인", "👑 관리자 메뉴"])
+tab1, tab2, tab3, tab4 = st.tabs(["🙋‍♂️ 멘티 예약 신청", "💼 멘토 일정 관리", "📋 멘토 예약 관리", "👑 관리자 메뉴"])
 
 # ==========================================
 # 👑 탭 4: 관리자 메뉴
@@ -198,7 +192,6 @@ with tab4:
                             save_mentors()
                             st.success("수정됨!")
                             
-                        # 멘토 삭제 시 관련 일정과 예약도 함께 삭제
                         if st.button("삭제", key=f"del_m_{i}"):
                             deleted_name = st.session_state.mentors_data[i]['name']
                             
@@ -275,10 +268,10 @@ with tab2:
                 st.error("비밀번호가 틀렸습니다.")
 
 # ==========================================
-# 📋 탭 3: 멘토 예약 관리 (승인)
+# 📋 탭 3: 멘토 예약 관리
 # ==========================================
 with tab3:
-    st.subheader("📋 멘토 예약 현황 및 승인")
+    st.subheader("📋 멘토 예약 현황 및 관리")
     mentor_name_tab3 = st.selectbox("본인(멘토) 이름 선택", mentor_names_list, key="mentor_select_tab3")
     
     if mentor_name_tab3 != "선택해주세요":
@@ -301,6 +294,7 @@ with tab3:
                             st.write(f"- **신청자:** {res['mentee_name']} ({res['mentee_email']})")
                             st.write(f"- **사전 질문:** {res['topic']}")
                             
+                            # 대기중일 때는 승인/거절 버튼 표시
                             if res['status'] == "대기중":
                                 col_btn1, col_btn2 = st.columns([1, 10])
                                 with col_btn1:
@@ -314,6 +308,12 @@ with tab3:
                                         res['status'] = "거절됨"
                                         save_reservations() 
                                         st.rerun()
+                            # [업데이트] 승인됨 상태일 때는 취소 버튼 표시
+                            elif res['status'] == "승인됨":
+                                if st.button("🚫 예약 취소", key=f"cancel_{res['id']}"):
+                                    res['status'] = "취소됨"
+                                    save_reservations() # 취소 상태로 구글 시트에 기록 업데이트!
+                                    st.rerun()
                             st.markdown("---")
             elif input_pw_tab3 != "":
                 st.error("비밀번호가 틀렸습니다.")
@@ -328,7 +328,7 @@ with tab1:
     if len(st.session_state.available_slots) == 0:
         st.info("현재 열려있는 멘토링 일정이 없습니다. 멘토가 일정을 등록할 때까지 기다려주세요.")
     else:
-        # [업데이트] 예약이 모두 찬 날짜는 안내판에서 제거하기 위한 로직
+        # '거절됨'과 '취소됨' 상태는 예약된 시간에서 제외 (다시 예약 가능하도록)
         avail_dict = {}
         for slot in st.session_state.available_slots:
             key = (slot["mentor"], slot["date"])
@@ -339,7 +339,7 @@ with tab1:
             
         booked_dict = {}
         for res in st.session_state.reservations:
-            if res["status"] != "거절됨":
+            if res["status"] not in ["거절됨", "취소됨"]:
                 key = (res["mentor"], res["date"])
                 dummy = datetime.date(2000, 1, 1)
                 s_dt = datetime.datetime.combine(dummy, res["start_time"])
@@ -381,8 +381,8 @@ with tab1:
             for b in available_blocks:
                 st.write(f"▶ 멘토 오픈 시간: **{b['start'].strftime('%H:%M')} ~ {b['end'].strftime('%H:%M')}**")
             
-            # [업데이트] 이미 예약된 시간 경고 표시
-            booked_times = [r for r in st.session_state.reservations if r['mentor'] == selected_mentor and r['date'] == selected_date and r['status'] != "거절됨"]
+            # '거절됨', '취소됨' 상태의 예약은 경고창에 띄우지 않음
+            booked_times = [r for r in st.session_state.reservations if r['mentor'] == selected_mentor and r['date'] == selected_date and r['status'] not in ["거절됨", "취소됨"]]
             
             if booked_times:
                 st.warning("🚨 주의: 아래 시간은 이미 예약이 꽉 찼습니다! 피해서 선택해주세요.")
@@ -415,7 +415,8 @@ with tab1:
             else:
                 overlap = False
                 for res in st.session_state.reservations:
-                    if res['mentor'] == selected_mentor and res['date'] == selected_date and res['status'] != "거절됨":
+                    # '거절됨', '취소됨' 예약은 겹치는 시간 계산에서 무시
+                    if res['mentor'] == selected_mentor and res['date'] == selected_date and res['status'] not in ["거절됨", "취소됨"]:
                         if max(mentee_start, res['start_time']) < min(mentee_end, res['end_time']):
                             overlap = True
                             break
