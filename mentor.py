@@ -8,6 +8,18 @@ from oauth2client.service_account import ServiceAccountCredentials
 st.set_page_config(page_title="사내 멘토링 예약", page_icon="🤝", layout="wide")
 
 # ==========================================
+# 🪄 [업데이트] 상단 메뉴바 및 고양이(GitHub) 버튼 숨기기
+# ==========================================
+hide_menu_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    </style>
+"""
+st.markdown(hide_menu_style, unsafe_allow_html=True)
+
+# ==========================================
 # ☁️ [핵심 1] 구글 스프레드시트 연결 및 탭 생성
 # ==========================================
 scope = [
@@ -116,7 +128,7 @@ def send_email(to_email, subject, body):
 mentor_names_list = ["선택해주세요"] + [m['name'] for m in st.session_state.mentors_data]
 
 # ==========================================
-# 탭 구성 (메뉴 이름 변경)
+# 탭 구성 
 # ==========================================
 tab1, tab2, tab3, tab4 = st.tabs(["🙋‍♂️ 멘티 예약 신청", "💼 멘토 일정 관리", "📋 멘토 예약 관리", "👑 관리자 메뉴"])
 
@@ -294,7 +306,6 @@ with tab3:
                             st.write(f"- **신청자:** {res['mentee_name']} ({res['mentee_email']})")
                             st.write(f"- **사전 질문:** {res['topic']}")
                             
-                            # 대기중일 때는 승인/거절 버튼 표시
                             if res['status'] == "대기중":
                                 col_btn1, col_btn2 = st.columns([1, 10])
                                 with col_btn1:
@@ -308,11 +319,10 @@ with tab3:
                                         res['status'] = "거절됨"
                                         save_reservations() 
                                         st.rerun()
-                            # [업데이트] 승인됨 상태일 때는 취소 버튼 표시
                             elif res['status'] == "승인됨":
                                 if st.button("🚫 예약 취소", key=f"cancel_{res['id']}"):
                                     res['status'] = "취소됨"
-                                    save_reservations() # 취소 상태로 구글 시트에 기록 업데이트!
+                                    save_reservations() 
                                     st.rerun()
                             st.markdown("---")
             elif input_pw_tab3 != "":
@@ -328,7 +338,6 @@ with tab1:
     if len(st.session_state.available_slots) == 0:
         st.info("현재 열려있는 멘토링 일정이 없습니다. 멘토가 일정을 등록할 때까지 기다려주세요.")
     else:
-        # '거절됨'과 '취소됨' 상태는 예약된 시간에서 제외 (다시 예약 가능하도록)
         avail_dict = {}
         for slot in st.session_state.available_slots:
             key = (slot["mentor"], slot["date"])
@@ -381,7 +390,6 @@ with tab1:
             for b in available_blocks:
                 st.write(f"▶ 멘토 오픈 시간: **{b['start'].strftime('%H:%M')} ~ {b['end'].strftime('%H:%M')}**")
             
-            # '거절됨', '취소됨' 상태의 예약은 경고창에 띄우지 않음
             booked_times = [r for r in st.session_state.reservations if r['mentor'] == selected_mentor and r['date'] == selected_date and r['status'] not in ["거절됨", "취소됨"]]
             
             if booked_times:
@@ -415,7 +423,6 @@ with tab1:
             else:
                 overlap = False
                 for res in st.session_state.reservations:
-                    # '거절됨', '취소됨' 예약은 겹치는 시간 계산에서 무시
                     if res['mentor'] == selected_mentor and res['date'] == selected_date and res['status'] not in ["거절됨", "취소됨"]:
                         if max(mentee_start, res['start_time']) < min(mentee_end, res['end_time']):
                             overlap = True
