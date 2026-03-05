@@ -5,19 +5,26 @@ import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-st.set_page_config(page_title="사내 멘토링 예약", page_icon="🤝", layout="wide")
+# [업데이트] 브라우저 탭 이름 변경
+st.set_page_config(page_title="Daehan Feed Mentoring", page_icon="🤝", layout="wide")
 
 # ==========================================
-# 🪄 [업데이트] 상단 메뉴바 및 고양이(GitHub) 버튼 숨기기
+# 🪄 [업데이트] 관리자 로그인 시에만 상단 메뉴 보이기
 # ==========================================
-hide_menu_style = """
-    <style>
-    #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
-    </style>
-"""
-st.markdown(hide_menu_style, unsafe_allow_html=True)
+# 관리자가 로그인하지 않은 상태일 때만 숨김 처리(투명 망토)를 적용합니다.
+if not st.session_state.get("admin_logged_in", False):
+    hide_menu_style = """
+        <style>
+        #MainMenu {visibility: hidden;}
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
+        </style>
+    """
+    st.markdown(hide_menu_style, unsafe_allow_html=True)
+
+# [업데이트] 메인 타이틀 달기
+st.title("🤝 Daehan Feed Mentoring")
+st.markdown("---")
 
 # ==========================================
 # ☁️ [핵심 1] 구글 스프레드시트 연결 및 탭 생성
@@ -128,7 +135,7 @@ def send_email(to_email, subject, body):
 mentor_names_list = ["선택해주세요"] + [m['name'] for m in st.session_state.mentors_data]
 
 # ==========================================
-# 탭 구성 
+# 탭 구성
 # ==========================================
 tab1, tab2, tab3, tab4 = st.tabs(["🙋‍♂️ 멘티 예약 신청", "💼 멘토 일정 관리", "📋 멘토 예약 관리", "👑 관리자 메뉴"])
 
@@ -147,14 +154,14 @@ with tab4:
         if st.button("로그인", key="admin_login"):
             if admin_id == st.session_state.admin_info["id"] and admin_pw == str(st.session_state.admin_info["pw"]):
                 st.session_state.admin_logged_in = True
-                st.rerun()
+                st.rerun() # 화면을 새로고침하면서 상단 메뉴가 나타납니다!
             else:
                 st.error("아이디 또는 비밀번호가 틀렸습니다.")
     else:
         st.success("✅ 관리자로 로그인되었습니다.")
         if st.button("로그아웃"):
             st.session_state.admin_logged_in = False
-            st.rerun()
+            st.rerun() # 화면을 새로고침하면서 상단 메뉴가 다시 사라집니다!
             
         st.markdown("---")
         
