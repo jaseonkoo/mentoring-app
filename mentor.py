@@ -95,7 +95,6 @@ def load_data():
     except:
         st.session_state.reservations = []
 
-# [업데이트] 모든 저장 함수에 빈칸(NaN) 청소기(fillna)를 달아줍니다!
 def save_admin():
     df = pd.DataFrame([st.session_state.admin_info])
     df = df.fillna("")
@@ -106,7 +105,7 @@ def save_mentors():
     ws_mentors.clear()
     if st.session_state.mentors_data:
         df = pd.DataFrame(st.session_state.mentors_data)
-        df = df.fillna("") # 마법의 코드: 빈칸(NaN)을 구글 시트가 좋아하는 안전한 빈칸("")으로 변경!
+        df = df.fillna("") 
         ws_mentors.update([df.columns.values.tolist()] + df.values.tolist())
 
 def save_slots():
@@ -358,7 +357,7 @@ with tab3:
                 st.error("비밀번호가 틀렸습니다.")
 
 # ==========================================
-# 🙋‍♂️ 탭 1: 멘티 예약 신청
+# 🙋‍♂️ 탭 1: 멘티 예약 신청 (레이아웃 정상화!)
 # ==========================================
 with tab1:
     st.subheader("🙋‍♂️ 원하시는 멘토와 시간을 선택해 주세요.")
@@ -399,29 +398,32 @@ with tab1:
                 st.success(f"**{m_name}** : {', '.join(sorted(list(dates)))} 예약 가능")
     st.markdown("---")
     
+    # 여기서부터 화면 전체 너비를 사용합니다.
+    mentee_name = st.text_input("신청자(멘티) 이름")
+    mentee_email = st.text_input("신청자 이메일 주소")
+    selected_mentor = st.selectbox("1. 멘토 선택", mentor_names_list, key="mentee_select")
+    
+    # 멘토를 선택하면 프로필 명함 띄워주기 (전체 너비)
+    if selected_mentor != "선택해주세요":
+        m_info = next((m for m in st.session_state.mentors_data if m['name'] == selected_mentor), None)
+        if m_info:
+            st.markdown("---")
+            st.markdown(f"#### 🏷️ 멘토 프로필: **{m_info['name']}**")
+            
+            t_name = m_info.get('team', '')
+            t_exp = m_info.get('expertise', '')
+            t_greet = m_info.get('greeting', '')
+            
+            if t_name or t_exp:
+                st.write(f"🏢 **소속:** {t_name if t_name else '미입력'} | 🎯 **전문 영역:** {t_exp if t_exp else '미입력'}")
+            if t_greet:
+                st.info(f"💡 **멘토의 한마디:**\n\n{t_greet}")
+            st.markdown("---")
+            
+    # 딱 이 부분(날짜와 시간)만 다시 화면을 좌우 2등분으로 나눕니다!
     col_left, col_right = st.columns([1, 1])
     
     with col_left:
-        mentee_name = st.text_input("신청자(멘티) 이름")
-        mentee_email = st.text_input("신청자 이메일 주소")
-        selected_mentor = st.selectbox("1. 멘토 선택", mentor_names_list, key="mentee_select")
-        
-        if selected_mentor != "선택해주세요":
-            m_info = next((m for m in st.session_state.mentors_data if m['name'] == selected_mentor), None)
-            if m_info:
-                st.markdown("---")
-                st.markdown(f"#### 🏷️ 멘토 프로필: **{m_info['name']}**")
-                
-                t_name = m_info.get('team', '')
-                t_exp = m_info.get('expertise', '')
-                t_greet = m_info.get('greeting', '')
-                
-                if t_name or t_exp:
-                    st.write(f"🏢 **소속:** {t_name if t_name else '미입력'} | 🎯 **전문 영역:** {t_exp if t_exp else '미입력'}")
-                if t_greet:
-                    st.info(f"💡 **멘토의 한마디:**\n\n{t_greet}")
-                st.markdown("---")
-                
         selected_date = st.date_input("2. 희망 날짜 선택 (위 안내판 참고)", datetime.date.today() + datetime.timedelta(days=1), key="mentee_date")
         
     with col_right:
@@ -448,6 +450,7 @@ with tab1:
             with col_s: mentee_start = st.time_input("3. 상담 시작 시간", available_blocks[0]['start'], key="m_start")
             with col_e: mentee_end = st.time_input("4. 상담 종료 시간", available_blocks[0]['end'], key="m_end")
 
+    # 사전 질문도 다시 화면 전체 너비로 시원하게 배치합니다.
     mentoring_topic = st.text_area("5. 멘토링 사전 질문 (필수)", placeholder="어떤 조언이 필요하신가요?")
     st.markdown("---")
 
