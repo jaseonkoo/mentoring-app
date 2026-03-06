@@ -48,7 +48,7 @@ def init_gspread():
     except: ws_res = doc.add_worksheet(title="reservations", rows="1000", cols="20")
         
     try: ws_mentors = doc.worksheet("mentors")
-    except: ws_mentors = doc.add_worksheet(title="mentors", rows="100", cols="10") # 멘토 정보가 늘어나서 열을 넉넉히 잡았습니다
+    except: ws_mentors = doc.add_worksheet(title="mentors", rows="100", cols="10") 
         
     try: ws_admin = doc.worksheet("admin")
     except: ws_admin = doc.add_worksheet(title="admin", rows="10", cols="2")
@@ -95,8 +95,10 @@ def load_data():
     except:
         st.session_state.reservations = []
 
+# [업데이트] 모든 저장 함수에 빈칸(NaN) 청소기(fillna)를 달아줍니다!
 def save_admin():
     df = pd.DataFrame([st.session_state.admin_info])
+    df = df.fillna("")
     ws_admin.clear()
     ws_admin.update([df.columns.values.tolist()] + df.values.tolist())
 
@@ -104,6 +106,7 @@ def save_mentors():
     ws_mentors.clear()
     if st.session_state.mentors_data:
         df = pd.DataFrame(st.session_state.mentors_data)
+        df = df.fillna("") # 마법의 코드: 빈칸(NaN)을 구글 시트가 좋아하는 안전한 빈칸("")으로 변경!
         ws_mentors.update([df.columns.values.tolist()] + df.values.tolist())
 
 def save_slots():
@@ -113,6 +116,7 @@ def save_slots():
         df['date'] = df['date'].astype(str)
         df['start'] = df['start'].astype(str)
         df['end'] = df['end'].astype(str)
+        df = df.fillna("")
         ws_slots.update([df.columns.values.tolist()] + df.values.tolist())
 
 def save_reservations():
@@ -122,6 +126,7 @@ def save_reservations():
         df['date'] = df['date'].astype(str)
         df['start_time'] = df['start_time'].astype(str)
         df['end_time'] = df['end_time'].astype(str)
+        df = df.fillna("")
         ws_res.update([df.columns.values.tolist()] + df.values.tolist())
 
 if "data_loaded" not in st.session_state:
@@ -174,7 +179,6 @@ with tab4:
                 else:
                     st.warning("비밀번호를 입력해주세요.")
                     
-        # [업데이트] 신규 멘토 등록 시 팀명, 전문영역, 인사말 추가
         with st.expander("👨‍🏫 신규 멘토 등록", expanded=True):
             col_m1, col_m2, col_m3 = st.columns(3)
             with col_m1: new_m_name = st.text_input("멘토 이름 (예: 홍길동 부장)")
@@ -206,7 +210,6 @@ with tab4:
                 else:
                     st.warning("이름과 비밀번호는 필수입니다.")
 
-        # [업데이트] 등록된 멘토 정보 수정 시 팀명, 전문영역, 인사말 포함
         with st.expander("📋 등록된 멘토 관리 (정보 수정 및 삭제)", expanded=True):
             if not st.session_state.mentors_data:
                 st.info("등록된 멘토가 없습니다.")
@@ -403,14 +406,12 @@ with tab1:
         mentee_email = st.text_input("신청자 이메일 주소")
         selected_mentor = st.selectbox("1. 멘토 선택", mentor_names_list, key="mentee_select")
         
-        # [업데이트] 멘토를 선택하면 프로필 명함 띄워주기
         if selected_mentor != "선택해주세요":
             m_info = next((m for m in st.session_state.mentors_data if m['name'] == selected_mentor), None)
             if m_info:
                 st.markdown("---")
                 st.markdown(f"#### 🏷️ 멘토 프로필: **{m_info['name']}**")
                 
-                # 구글 시트에 예전에 등록해서 팀명 정보가 없을 수도 있으므로 .get() 안전 장치 사용
                 t_name = m_info.get('team', '')
                 t_exp = m_info.get('expertise', '')
                 t_greet = m_info.get('greeting', '')
