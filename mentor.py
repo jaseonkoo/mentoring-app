@@ -8,7 +8,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # [1] 브라우저 및 페이지 기본 설정
 st.set_page_config(page_title="Daehan Feed Mentoring", page_icon="🤝", layout="wide")
 
-# [2] 관리자 로그인 전에는 상단 메뉴(고양이 버튼 등) 숨기기
+# [2] 관리자 로그인 전에는 상단 메뉴 및 고양이 버튼 숨기기
 if not st.session_state.get("admin_logged_in", False):
     st.markdown("""
         <style>
@@ -36,7 +36,6 @@ def init_gspread():
     client = gspread.authorize(creds)
     doc = client.open("멘토링예약DB")
     
-    # 각 시트(탭)가 없으면 생성, 있으면 불러오기
     titles = [w.title for w in doc.worksheets()]
     ws_slots = doc.worksheet("slots") if "slots" in titles else doc.add_worksheet("slots", 1000, 20)
     ws_res = doc.worksheet("reservations") if "reservations" in titles else doc.add_worksheet("reservations", 1000, 20)
@@ -48,7 +47,7 @@ def init_gspread():
 ws_slots, ws_res, ws_mentors, ws_admin = init_gspread()
 
 # ==========================================
-# 💾 데이터 처리 및 저장 함수
+# 💾 데이터 처리 및 저장 함수 (에러 방지 로직 포함)
 # ==========================================
 def load_data():
     try: st.session_state.admin_info = ws_admin.get_all_records()[0]
@@ -76,6 +75,7 @@ def safe_save(ws, data_list):
         df = pd.DataFrame(data_list)
         for col in ['date', 'start', 'end', 'start_time', 'end_time']:
             if col in df.columns: df[col] = df[col].astype(str)
+        # 중요: 구글 시트 에러(InvalidJSONError) 방지를 위해 빈칸(NaN)을 공백("")으로 채움
         df = df.fillna("")
         ws.update([df.columns.values.tolist()] + df.values.tolist())
 
@@ -178,8 +178,8 @@ with tab2:
 
             st.markdown("#### ✨ 새로운 상담 시간 및 장소 등록")
             
-            # [수정] 날짜, 시작, 종료, 장소를 한 줄로 배치 (컬럼 비중 1:1:1:2)
-            c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
+            # [수정] 날짜, 시작, 종료, 장소를 완벽하게 동일한 너비(1:1:1:1)로 배치
+            c1, c2, c3, c4 = st.columns(4)
             with c1: d_val = st.date_input("날짜", datetime.date.today(), key="d_t2")
             with c2: s_val = st.time_input("시작", datetime.time(13,0), key="s_t2")
             with c3: e_val = st.time_input("종료", datetime.time(17,0), key="e_t2")
@@ -238,7 +238,6 @@ with tab4:
         if st.button("관리자 로그아웃"): st.session_state.admin_logged_in = False; st.rerun()
         st.divider()
         with st.expander("👨‍🏫 멘토 신규 등록/수정"):
-            st.write("새로운 전문가(멘토)를 시스템에 등록합니다.")
             c1, c2, c3 = st.columns(3)
             n_m = c1.text_input("이름")
             n_t = c2.text_input("팀명")
