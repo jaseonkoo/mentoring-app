@@ -263,17 +263,42 @@ with tab2:
             if input_pw_tab2 == str(current_mentor["pw"]):
                 st.success(f"{mentor_name_tab2}님, 환영합니다!")
                 
+                # [업데이트 1] 멘토가 스스로 비밀번호를 변경할 수 있는 메뉴
+                with st.expander("🔑 내 비밀번호 변경", expanded=False):
+                    new_mentor_pw = st.text_input("새로운 비밀번호 입력", type="password", key="new_pw_mentor")
+                    if st.button("비밀번호 변경하기"):
+                        if new_mentor_pw:
+                            for i, m in enumerate(st.session_state.mentors_data):
+                                if m['name'] == mentor_name_tab2:
+                                    st.session_state.mentors_data[i]['pw'] = str(new_mentor_pw)
+                                    break
+                            save_mentors()
+                            st.success("비밀번호가 안전하게 변경되었습니다!")
+                        else:
+                            st.warning("새로운 비밀번호를 입력해주세요.")
+                
+                st.markdown("---")
+                
                 st.markdown("#### ✨ 새로운 상담 시간 열기")
                 col_date, col_start, col_end = st.columns(3)
                 with col_date: avail_date = st.date_input("상담 가능한 날짜", datetime.date.today())
                 with col_start: start_time = st.time_input("오픈 시작 시간", datetime.time(13, 0))
                 with col_end: end_time = st.time_input("오픈 종료 시간", datetime.time(17, 0))
+                
+                # [업데이트 2] 장소 입력 칸 추가
+                slot_location = st.text_input("📍 상담 장소 (예: 인천 본사 회의실, 온라인 화상회의 등)")
                     
                 if st.button("✅ 이 시간 예약 가능으로 열기"):
                     if start_time >= end_time:
                         st.error("⚠️ 종료 시간은 시작 시간보다 늦어야 합니다!")
                     else:
-                        slot_info = {"mentor": mentor_name_tab2, "date": avail_date, "start": start_time, "end": end_time}
+                        slot_info = {
+                            "mentor": mentor_name_tab2, 
+                            "date": avail_date, 
+                            "start": start_time, 
+                            "end": end_time,
+                            "location": slot_location # 장소 정보 추가!
+                        }
                         if slot_info not in st.session_state.available_slots:
                             st.session_state.available_slots.append(slot_info)
                             save_slots() 
@@ -295,7 +320,9 @@ with tab2:
                     for i, slot in enumerate(my_slots):
                         col_info, col_btn = st.columns([4, 1])
                         with col_info:
-                            st.write(f"📅 **{slot['date']}** ⏰ {slot['start'].strftime('%H:%M')} ~ {slot['end'].strftime('%H:%M')}")
+                            # [업데이트 2] 관리 화면에서도 장소가 보이도록 수정
+                            display_loc = slot.get('location', '장소 미지정')
+                            st.write(f"📅 **{slot['date']}** ⏰ {slot['start'].strftime('%H:%M')} ~ {slot['end'].strftime('%H:%M')} | 📍 {display_loc}")
                         with col_btn:
                             if st.button("❌ 삭제", key=f"del_slot_{slot['date']}_{slot['start']}"):
                                 st.session_state.available_slots.remove(slot)
@@ -357,7 +384,7 @@ with tab3:
                 st.error("비밀번호가 틀렸습니다.")
 
 # ==========================================
-# 🙋‍♂️ 탭 1: 멘티 예약 신청 (레이아웃 정상화!)
+# 🙋‍♂️ 탭 1: 멘티 예약 신청
 # ==========================================
 with tab1:
     st.subheader("🙋‍♂️ 원하시는 멘토와 시간을 선택해 주세요.")
@@ -398,12 +425,10 @@ with tab1:
                 st.success(f"**{m_name}** : {', '.join(sorted(list(dates)))} 예약 가능")
     st.markdown("---")
     
-    # 여기서부터 화면 전체 너비를 사용합니다.
     mentee_name = st.text_input("신청자(멘티) 이름")
     mentee_email = st.text_input("신청자 이메일 주소")
     selected_mentor = st.selectbox("1. 멘토 선택", mentor_names_list, key="mentee_select")
     
-    # 멘토를 선택하면 프로필 명함 띄워주기 (전체 너비)
     if selected_mentor != "선택해주세요":
         m_info = next((m for m in st.session_state.mentors_data if m['name'] == selected_mentor), None)
         if m_info:
@@ -420,7 +445,6 @@ with tab1:
                 st.info(f"💡 **멘토의 한마디:**\n\n{t_greet}")
             st.markdown("---")
             
-    # 딱 이 부분(날짜와 시간)만 다시 화면을 좌우 2등분으로 나눕니다!
     col_left, col_right = st.columns([1, 1])
     
     with col_left:
@@ -437,7 +461,11 @@ with tab1:
         else:
             st.info("✅ 아래 멘토의 전체 오픈 시간 안에서 원하는 상담 시간을 입력하세요.")
             for b in available_blocks:
-                st.write(f"▶ 멘토 오픈 시간: **{b['start'].strftime('%H:%M')} ~ {b['end'].strftime('%H:%M')}**")
+                # [업데이트 2] 멘티 화면에서도 장소를 보여줍니다. (과거 데이터는 '장소 미지정'으로 처리)
+                display_loc = b.get('location', '장소 미지정')
+                if display_loc == "": display_loc = "장소 미지정"
+                
+                st.write(f"▶ 멘토 오픈 시간: **{b['start'].strftime('%H:%M')} ~ {b['end'].strftime('%H:%M')}** | 📍 장소: **{display_loc}**")
             
             booked_times = [r for r in st.session_state.reservations if r['mentor'] == selected_mentor and r['date'] == selected_date and r['status'] not in ["거절됨", "취소됨"]]
             
@@ -450,7 +478,6 @@ with tab1:
             with col_s: mentee_start = st.time_input("3. 상담 시작 시간", available_blocks[0]['start'], key="m_start")
             with col_e: mentee_end = st.time_input("4. 상담 종료 시간", available_blocks[0]['end'], key="m_end")
 
-    # 사전 질문도 다시 화면 전체 너비로 시원하게 배치합니다.
     mentoring_topic = st.text_area("5. 멘토링 사전 질문 (필수)", placeholder="어떤 조언이 필요하신가요?")
     st.markdown("---")
 
