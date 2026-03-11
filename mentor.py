@@ -48,7 +48,7 @@ def init_gspread():
 ws_slots, ws_res, ws_mentors, ws_admin = init_gspread()
 
 # ==========================================
-# 💾 데이터 처리 및 저장 함수 (에러 방지 로직 포함)
+# 💾 데이터 처리 및 저장 함수
 # ==========================================
 def load_data():
     try: st.session_state.admin_info = ws_admin.get_all_records()[0]
@@ -177,12 +177,13 @@ with tab2:
                     st.success("비밀번호가 변경되었습니다.")
 
             st.markdown("#### ✨ 새로운 상담 시간 및 장소 등록")
-            c1, c2, c3 = st.columns(3)
+            
+            # [수정] 날짜, 시작, 종료, 장소를 한 줄로 배치 (컬럼 비중 1:1:1:2)
+            c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
             with c1: d_val = st.date_input("날짜", datetime.date.today(), key="d_t2")
             with c2: s_val = st.time_input("시작", datetime.time(13,0), key="s_t2")
             with c3: e_val = st.time_input("종료", datetime.time(17,0), key="e_t2")
-            # [수정] 예시 문구(placeholder) 제거
-            loc_val = st.text_input("📍 상담 장소")
+            with c4: loc_val = st.text_input("📍 상담 장소")
             
             if st.button("일정 확정 및 등록"):
                 st.session_state.available_slots.append({"mentor": m_login, "date": d_val, "start": s_val, "end": e_val, "location": loc_val})
@@ -237,6 +238,7 @@ with tab4:
         if st.button("관리자 로그아웃"): st.session_state.admin_logged_in = False; st.rerun()
         st.divider()
         with st.expander("👨‍🏫 멘토 신규 등록/수정"):
+            st.write("새로운 전문가(멘토)를 시스템에 등록합니다.")
             c1, c2, c3 = st.columns(3)
             n_m = c1.text_input("이름")
             n_t = c2.text_input("팀명")
@@ -245,6 +247,6 @@ with tab4:
             n_g = st.text_area("멘토 인사말")
             if st.button("멘토 등록하기"):
                 st.session_state.mentors_data.append({"name":n_m, "team":n_t, "pw":n_p, "expertise":n_e, "greeting":n_g, "email":""})
-                save_mentors()
+                safe_save(ws_mentors, st.session_state.mentors_data)
                 st.success("멘토가 등록되었습니다.")
                 st.rerun()
