@@ -286,7 +286,7 @@ with tab2:
                 with col_end: end_time = st.time_input("오픈 종료 시간", datetime.time(17, 0))
                 
                 # [업데이트 2] 장소 입력 칸 추가
-                slot_location = st.text_input("📍 상담 장소 ")
+                slot_location = st.text_input("📍 상담 장소 (예: 인천 본사 회의실, 온라인 화상회의 등)")
                     
                 if st.button("✅ 이 시간 예약 가능으로 열기"):
                     if start_time >= end_time:
@@ -516,4 +516,3 @@ with tab1:
                     st.session_state.reservations.append(new_reservation)
                     save_reservations() 
                     st.success("🎉 예약 신청이 완료되었습니다! 멘토의 승인을 기다려주세요.")
-
