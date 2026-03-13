@@ -98,6 +98,7 @@ tab1, tab2, tab3, tab4 = st.tabs(["🙋‍♂️ 멘티 예약 신청", "💼 �
 with tab1:
     st.subheader("🗓️ 멘토링 예약 신청")
     
+    # [A] 현재 예약 가능 현황
     with st.expander("📢 실시간 예약 가능 멘토 및 날짜 확인하기", expanded=True):
         if not st.session_state.available_slots:
             st.info("현재 등록된 멘토링 일정이 없습니다.")
@@ -116,6 +117,7 @@ with tab1:
 
     st.markdown("---")
 
+    # [B] 신청자 정보 (완벽한 1:1:1:1 균형 배치)
     col_info1, col_info2, col_info3, col_info4 = st.columns(4)
     with col_info1: mentee_name = st.text_input("신청자 성함")
     with col_info2: mentee_pos = st.text_input("신청자 직급")
@@ -124,6 +126,11 @@ with tab1:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # [핵심 수정] NameError 방지를 위해 시간 변수를 None으로 초기화
+    t_start = None
+    t_end = None
+
+    # [C] 하단 섹션 좌우 분할
     col_main, col_profile = st.columns([1.2, 1])
 
     with col_main:
@@ -163,9 +170,12 @@ with tab1:
         else:
             st.info("위에서 멘토를 선택하시면 상세 정보가 이곳에 나타납니다.")
 
+    # [D] 예약 신청 로직 (안전장치 추가)
     if st.button("🚀 멘토링 예약 신청하기", type="primary", use_container_width=True):
         if not mentee_name or selected_m == "선택해주세요" or not m_topic:
-            st.error("신청자 정보와 멘토, 상담 주제를 모두 입력해 주세요.")
+            st.error("필수 정보를 모두 입력해주세요.")
+        elif t_start is None or t_end is None:
+            st.error("선택한 날짜에 가능한 상담 시간이 없습니다. 다른 날짜나 멘토를 선택해 주세요.")
         else:
             new_res = {
                 "id": str(uuid.uuid4()), "mentor": selected_m, "mentee_name": mentee_name, 
@@ -214,7 +224,7 @@ with tab2:
                     safe_save(ws_slots, st.session_state.available_slots)
                     st.rerun()
 
-# --- [📋 탭 3: 멘토 예약 관리 (중복 승인 방지 적용)] ---
+# --- [📋 탭 3: 멘토 예약 관리] ---
 with tab3:
     st.subheader("📋 멘티 신청 현황 관리")
     m_sel_t3 = st.selectbox("본인 성함 선택", mentor_names, key="m_sel_t3")
@@ -234,29 +244,20 @@ with tab3:
                     
                     if r['status'] == "대기중":
                         ca, cb = st.columns(2)
-                        
-                        # [업데이트] 승인 버튼 클릭 시 중복 체크 로직 추가
                         if ca.button("✅ 예약 승인", key=f"ok_{r['id']}"):
-                            # 실시간으로 이미 승인된 일정이 있는지 체크
                             conflict = False
                             for existing in st.session_state.reservations:
-                                if (existing['mentor'] == r['mentor'] and 
-                                    existing['date'] == r['date'] and 
-                                    existing['status'] == "승인됨"):
-                                    # 시간대 겹침 확인 로직
+                                if (existing['mentor'] == r['mentor'] and existing['date'] == r['date'] and existing['status'] == "승인됨"):
                                     if max(r['start_time'], existing['start_time']) < min(r['end_time'], existing['end_time']):
                                         conflict = True
                                         break
-                            
                             if conflict:
                                 st.error("🚫 승인 불가: 해당 시간대에 이미 승인된 다른 예약이 존재합니다.")
                             else:
                                 r['status'] = "승인됨"
                                 safe_save(ws_res, st.session_state.reservations)
-                                send_email(r['mentee_email'], "[Daehan Feed Mentoring] 예약 승인 알림", f"{r['mentee_name']}님, 멘토링 예약이 승인되었습니다.")
                                 st.success("예약이 성공적으로 승인되었습니다.")
                                 st.rerun()
-                                
                         if cb.button("❌ 예약 거절", key=f"no_{r['id']}"):
                             r['status'] = "거절됨"
                             safe_save(ws_res, st.session_state.reservations)
@@ -282,7 +283,7 @@ with tab4:
         st.divider()
         with st.expander("👨‍🏫 멘토 신규 등록"):
             nc1, nc2, nc3, nc4 = st.columns(4)
-            n_m, n_p_title, n_t, n_pw = nc1.text_input("성함"), nc2.text_input("직급"), nc3.text_input("팀명"), nc4.text_input("임시 비번")
+            n_m, n_p_title, n_t, n_pw = nc1.text_input("성함"), nc2.text_input("직급"), nc3.text_input("소속 팀명"), nc4.text_input("임시 비번")
             n_e, n_em = st.text_input("전문 영역"), st.text_input("이메일 주소")
             n_g = st.text_area("멘토 인사말")
             if st.button("멘토 등록하기"):
