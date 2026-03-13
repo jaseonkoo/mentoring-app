@@ -36,7 +36,7 @@ def init_gspread():
     client = gspread.authorize(creds)
     doc = client.open("멘토링예약DB")
     
-    titles = [w.title for w in doc.worksheet_list()] if hasattr(doc, 'worksheet_list') else [w.title for w in doc.worksheets()]
+    titles = [w.title for w in doc.worksheets()]
     ws_slots = doc.worksheet("slots") if "slots" in titles else doc.add_worksheet("slots", 1000, 20)
     ws_res = doc.worksheet("reservations") if "reservations" in titles else doc.add_worksheet("reservations", 1000, 20)
     ws_mentors = doc.worksheet("mentors") if "mentors" in titles else doc.add_worksheet("mentors", 100, 10)
@@ -47,7 +47,7 @@ def init_gspread():
 ws_slots, ws_res, ws_mentors, ws_admin = init_gspread()
 
 # ==========================================
-# 💾 데이터 처리 및 저장 함수 (에러 방지 로직 포함)
+# 💾 데이터 처리 및 저장 함수
 # ==========================================
 def load_data():
     try: st.session_state.admin_info = ws_admin.get_all_records()[0]
@@ -177,7 +177,7 @@ with tab2:
 
             st.markdown("#### ✨ 새로운 상담 시간 및 장소 등록")
             
-            # [균형 레이아웃] 4칸을 완벽하게 동일한 너비로 배치
+            # [균형 레이아웃] 4칸 동일 너비 배치
             c1, c2, c3, c4 = st.columns(4)
             with c1: d_val = st.date_input("날짜", datetime.date.today(), key="d_t2")
             with c2: s_val = st.time_input("시작", datetime.time(13,0), key="s_t2")
@@ -223,7 +223,7 @@ with tab3:
                         if st.button("🚫 예약 취소", key=f"can_{r['id']}"):
                             r['status']="취소됨"; safe_save(ws_res, st.session_state.reservations); st.rerun()
 
-# --- [👑 탭 4: 관리자 메뉴 - 복구 완료!] ---
+# --- [👑 탭 4: 관리자 메뉴] ---
 with tab4:
     st.subheader("👑 인사팀 전용 관리자 시스템")
     if not st.session_state.get("admin_logged_in", False):
@@ -237,33 +237,41 @@ with tab4:
         if st.button("관리자 로그아웃"): st.session_state.admin_logged_in = False; st.rerun()
         st.divider()
         
-        # [관리 기능 1] 멘토 신규 등록
+        # [업데이트] 신규 멘토 등록 시 4단 균형 레이아웃 및 이메일 칸 복구
         with st.expander("👨‍🏫 멘토 신규 등록"):
             st.write("새로운 전문가(멘토)를 시스템에 등록합니다.")
-            c1, c2, c3 = st.columns(3)
-            n_m = c1.text_input("이름")
-            n_t = c2.text_input("팀명")
-            n_p = c3.text_input("임시 비번")
-            n_e = st.text_input("전문 영역")
+            nc1, nc2, nc3, nc4 = st.columns(4) # 4칸 동일 너비
+            n_m = nc1.text_input("이름")
+            n_t = nc2.text_input("팀명")
+            n_p = nc3.text_input("임시 비번")
+            n_em = nc4.text_input("이메일 주소") # 이메일 칸 복구!
+            
+            n_e = st.text_input("전문 영역 (예: 직무역량, 조직문화)")
             n_g = st.text_area("멘토 인사말")
+            
             if st.button("멘토 등록하기"):
-                st.session_state.mentors_data.append({"name":n_m, "team":n_t, "pw":n_p, "expertise":n_e, "greeting":n_g, "email":""})
-                safe_save(ws_mentors, st.session_state.mentors_data)
-                st.success(f"'{n_m}' 멘토가 등록되었습니다.")
-                st.rerun()
+                if n_m and n_p:
+                    st.session_state.mentors_data.append({
+                        "name":n_m, "team":n_t, "pw":n_p, "expertise":n_e, "greeting":n_g, "email":n_em
+                    })
+                    safe_save(ws_mentors, st.session_state.mentors_data)
+                    st.success(f"'{n_m}' 멘토가 성공적으로 등록되었습니다.")
+                    st.rerun()
+                else:
+                    st.warning("성함과 비밀번호는 필수 입력 사항입니다.")
         
-        # [관리 기능 2] 등록된 멘토 관리 (리스트 복구!)
+        # [관리 기능 2] 등록된 멘토 관리
         with st.expander("📋 등록된 멘토 관리 (수정/삭제)", expanded=True):
             if not st.session_state.mentors_data:
                 st.info("현재 등록된 멘토가 없습니다.")
             else:
                 for i, m in enumerate(st.session_state.mentors_data):
                     st.markdown(f"**[{m['name']}] 정보 관리**")
-                    col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
-                    with col1: u_team = st.text_input("팀명", value=m.get('team',''), key=f"ut_{i}")
-                    with col2: u_pw = st.text_input("비번", value=m.get('pw',''), key=f"up_{i}")
-                    with col3: u_exp = st.text_input("전문영역", value=m.get('expertise',''), key=f"ue_{i}")
-                    with col4: u_email = st.text_input("이메일", value=m.get('email',''), key=f"um_{i}")
+                    col1, col2, col3, col4 = st.columns(4) # 4칸 동일 너비
+                    u_team = col1.text_input("팀명", value=m.get('team',''), key=f"ut_{i}")
+                    u_pw = col2.text_input("비번", value=m.get('pw',''), key=f"up_{i}")
+                    u_exp = col3.text_input("전문영역", value=m.get('expertise',''), key=f"ue_{i}")
+                    u_email = col4.text_input("이메일", value=m.get('email',''), key=f"um_{i}")
                     
                     u_greet = st.text_area("인사말", value=m.get('greeting',''), key=f"ug_{i}")
                     
@@ -271,9 +279,8 @@ with tab4:
                     if btn1.button("💾 저장", key=f"us_{i}"):
                         st.session_state.mentors_data[i].update({"team":u_team, "pw":u_pw, "expertise":u_exp, "greeting":u_greet, "email":u_email})
                         safe_save(ws_mentors, st.session_state.mentors_data)
-                        st.success("수정 완료!")
+                        st.success("정보가 수정되었습니다.")
                     if btn2.button("❌ 삭제", key=f"ud_{i}"):
-                        del_name = st.session_state.mentors_data[i]['name']
                         st.session_state.mentors_data.pop(i)
                         safe_save(ws_mentors, st.session_state.mentors_data)
                         st.rerun()
