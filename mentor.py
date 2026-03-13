@@ -11,11 +11,11 @@ st.set_page_config(page_title="Daehan Feed Mentoring", page_icon="🤝", layout=
 # [2] 디자인 발란스 및 여백 조정을 위한 마스터 CSS
 st.markdown("""
     <style>
-    /* 전체 요소 간 여백 최적화 */
+    /* 전체 요소 간 여백 및 균형 최적화 */
     .stTextInput, .stSelectbox, .stDateInput, .stTextArea, .stTimeInput {
         margin-bottom: 20px;
     }
-    /* 상단 메뉴 숨기기 */
+    /* 상단 메뉴 및 불필요한 버튼 숨기기 */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
@@ -23,7 +23,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 프로그램 메인 타이틀
+# 프로그램 메인 타이틀 (대한사료 공식 명칭 반영)
 st.title("🤝 Daehan Feed Mentoring")
 st.caption("대한사료 임직원 간의 성장을 돕는 실시간 소통 플랫폼")
 st.markdown("---")
@@ -89,7 +89,7 @@ if "data_loaded" not in st.session_state:
 mentor_names = ["선택해주세요"] + [m['name'] for m in st.session_state.mentors_data]
 
 # ==========================================
-# 📊 탭 구성
+# 📊 탭 구성 (UI 디자인 고도화)
 # ==========================================
 tab1, tab2, tab3, tab4 = st.tabs(["🙋‍♂️ 멘티 예약 신청", "💼 멘토 일정 관리", "📋 멘토 예약 관리", "👑 관리자 메뉴"])
 
@@ -115,16 +115,16 @@ with tab1:
 
     st.markdown("---")
 
-    # [수정] 신청자 정보 4종 세트 한 줄 배치 (성함/직급/팀명/이메일)
-    col_info1, col_info2, col_info3, col_info4 = st.columns([1, 1, 1, 2])
+    # [수정] 성함, 직급, 팀명, 이메일을 완벽하게 같은 비율(1:1:1:1)로 배치
+    col_info1, col_info2, col_info3, col_info4 = st.columns(4)
     with col_info1: mentee_name = st.text_input("신청자 성함")
     with col_info2: mentee_pos = st.text_input("신청자 직급")
     with col_info3: mentee_team = st.text_input("신청자 팀명")
     with col_info4: mentee_email = st.text_input("사내 이메일 주소")
 
-    st.markdown("<br>", unsafe_allow_html=True) # 미세 여백 조절
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    # [수정] 하단 섹션 좌우 분할 (왼쪽: 선택 및 입력 / 오른쪽: 멘토 프로필)
+    # [레이아웃] 좌우 분할 (대시보드 형태 유지)
     col_main, col_profile = st.columns([1.2, 1])
 
     with col_main:
@@ -150,7 +150,7 @@ with tab1:
         if selected_m != "선택해주세요":
             p_card = next((m for m in st.session_state.mentors_data if m['name'] == selected_m), None)
             if p_card:
-                # 멘토 프로필을 오른쪽에 명함 형태로 표시
+                # 멘토 프로필 카드 디자인
                 st.markdown(f"""
                     <div style="border: 2px solid #4A90E2; padding: 30px; border-radius: 15px; background-color: #f0f7ff; min-height: 400px;">
                         <h3 style="margin-top:0; color: #1E3A8A; border-bottom: 2px solid #4A90E2; padding-bottom: 10px;">🎖️ {p_card['name']} {p_card.get('position','')} 멘토</h3>
