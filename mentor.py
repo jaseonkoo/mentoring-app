@@ -11,15 +11,9 @@ st.set_page_config(page_title="Daehan Feed Mentoring", page_icon="🤝", layout=
 # [2] 디자인 발란스 및 여백 조정을 위한 마스터 CSS
 st.markdown("""
     <style>
-    /* 전체 여백 및 간격 최적화 */
+    /* 전체 요소 간 여백 최적화 */
     .stTextInput, .stSelectbox, .stDateInput, .stTextArea, .stTimeInput {
-        margin-bottom: 25px;
-    }
-    hr {
-        margin-top: 35px;
-        margin-bottom: 35px;
-        border: 0;
-        border-top: 1px solid #eee;
+        margin-bottom: 20px;
     }
     /* 상단 메뉴 숨기기 */
     #MainMenu {visibility: hidden;}
@@ -121,35 +115,22 @@ with tab1:
 
     st.markdown("---")
 
-    # [수정] 멘티 정보 입력 (균형을 위해 3단 구성)
-    col_mt1, col_mt2, col_mt3 = st.columns(3)
-    with col_mt1: mentee_name = st.text_input("신청자 성함")
-    with col_mt2: mentee_pos = st.text_input("신청자 직급")
-    with col_mt3: mentee_team = st.text_input("신청자 팀명")
+    # [수정] 신청자 정보 4종 세트 한 줄 배치 (성함/직급/팀명/이메일)
+    col_info1, col_info2, col_info3, col_info4 = st.columns([1, 1, 1, 2])
+    with col_info1: mentee_name = st.text_input("신청자 성함")
+    with col_info2: mentee_pos = st.text_input("신청자 직급")
+    with col_info3: mentee_team = st.text_input("신청자 팀명")
+    with col_info4: mentee_email = st.text_input("사내 이메일 주소")
 
-    col_mt4, col_mt5 = st.columns([1.5, 1])
-    with col_mt4: mentee_email = st.text_input("사내 이메일 주소")
-    with col_mt5: selected_m = st.selectbox("상담받을 멘토 선택", mentor_names)
+    st.markdown("<br>", unsafe_allow_html=True) # 미세 여백 조절
 
-    # 멘토 프로필 명함 (직급 포함)
-    if selected_m != "선택해주세요":
-        p_card = next((m for m in st.session_state.mentors_data if m['name'] == selected_m), None)
-        if p_card:
-            st.markdown(f"""
-                <div style="border: 2px solid #4A90E2; padding: 25px; border-radius: 15px; background-color: #f0f7ff; margin: 25px 0;">
-                    <h3 style="margin-top:0; color: #1E3A8A;">🎖️ {p_card['name']} {p_card.get('position','')} 멘토 프로필</h3>
-                    <p style="font-size: 1.1em;">🏢 <b>소속:</b> {p_card.get('team','정보 없음')} | 🎯 <b>전문영역:</b> {p_card.get('expertise','정보 없음')}</p>
-                    <p style="font-size: 1.05em; background-color: white; padding: 15px; border-radius: 5px; border-left: 5px solid #4A90E2;">
-                        <b>멘토의 한마디:</b><br>{p_card.get('greeting','열린 마음으로 기다리고 있겠습니다.')}
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
+    # [수정] 하단 섹션 좌우 분할 (왼쪽: 선택 및 입력 / 오른쪽: 멘토 프로필)
+    col_main, col_profile = st.columns([1.2, 1])
 
-    col_d1, col_d2 = st.columns(2)
-    with col_d1:
+    with col_main:
+        selected_m = st.selectbox("상담받을 멘토 선택", mentor_names)
         sel_date = st.date_input("희망 날짜 선택", datetime.date.today() + datetime.timedelta(days=1))
-    
-    with col_d2:
+        
         slots_found = [s for s in st.session_state.available_slots if s['mentor']==selected_m and s['date']==sel_date]
         if not slots_found:
             if selected_m != "선택해주세요": st.warning("선택하신 날짜에 멘토님의 오픈된 일정이 없습니다.")
@@ -163,8 +144,27 @@ with tab1:
             with cs: t_start = st.time_input("시작 시간", slots_found[0]['start'])
             with ce: t_end = st.time_input("종료 시간", slots_found[0]['end'])
 
-    m_topic = st.text_area("사전 질문 및 상담 주제 (필수)", placeholder="멘토링을 통해 얻고 싶은 점을 구체적으로 적어주세요.")
-    
+        m_topic = st.text_area("사전 질문 및 상담 주제 (필수)", placeholder="멘토링을 통해 얻고 싶은 점을 구체적으로 적어주세요.")
+
+    with col_profile:
+        if selected_m != "선택해주세요":
+            p_card = next((m for m in st.session_state.mentors_data if m['name'] == selected_m), None)
+            if p_card:
+                # 멘토 프로필을 오른쪽에 명함 형태로 표시
+                st.markdown(f"""
+                    <div style="border: 2px solid #4A90E2; padding: 30px; border-radius: 15px; background-color: #f0f7ff; min-height: 400px;">
+                        <h3 style="margin-top:0; color: #1E3A8A; border-bottom: 2px solid #4A90E2; padding-bottom: 10px;">🎖️ {p_card['name']} {p_card.get('position','')} 멘토</h3>
+                        <p style="font-size: 1.15em; margin-top: 20px;">🏢 <b>소속:</b> {p_card.get('team','정보 없음')}</p>
+                        <p style="font-size: 1.15em;">🎯 <b>전문영역:</b> {p_card.get('expertise','정보 없음')}</p>
+                        <div style="margin-top: 30px; background-color: white; padding: 20px; border-radius: 10px; border-left: 8px solid #4A90E2;">
+                            <p style="font-size: 1.1em; color: #333; line-height: 1.6;"><b>멘토의 한마디:</b><br>
+                            <i>"{p_card.get('greeting','열린 마음으로 기다리고 있겠습니다.')}"</i></p>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("위에서 멘토를 선택하시면 상세 정보가 이곳에 나타납니다.")
+
     if st.button("🚀 멘토링 예약 신청하기", type="primary", use_container_width=True):
         if not mentee_name or selected_m == "선택해주세요" or not m_topic:
             st.error("신청자 정보와 멘토, 상담 주제를 모두 입력해 주세요.")
@@ -177,7 +177,7 @@ with tab1:
             st.session_state.reservations.append(new_res)
             safe_save(ws_res, st.session_state.reservations)
             st.balloons()
-            st.success("예약 신청이 완료되었습니다! 멘토님의 승인 알림을 기다려 주세요.")
+            st.success("예약 신청이 완료되었습니다!")
 
 # --- [💼 탭 2: 멘토 일정 관리] ---
 with tab2:
@@ -195,8 +195,6 @@ with tab2:
                     st.success("비밀번호가 변경되었습니다.")
 
             st.markdown("#### ✨ 새로운 상담 시간 및 장소 등록")
-            
-            # [균형 레이아웃] 4칸 동일 너비 배치
             c1, c2, c3, c4 = st.columns(4)
             with c1: d_val = st.date_input("날짜", datetime.date.today(), key="d_t2")
             with c2: s_val = st.time_input("시작", datetime.time(13,0), key="s_t2")
@@ -255,15 +253,12 @@ with tab4:
     else:
         if st.button("관리자 로그아웃"): st.session_state.admin_logged_in = False; st.rerun()
         st.divider()
-        
-        # [수정] 멘토 신규 등록 (직급 추가 및 4단 균형 유지)
         with st.expander("👨‍🏫 멘토 신규 등록"):
             nc1, nc2, nc3, nc4 = st.columns(4)
             n_m = nc1.text_input("성함")
             n_p_title = nc2.text_input("직급")
             n_t = nc3.text_input("소속 팀명")
             n_pw = nc4.text_input("임시 비번")
-            
             n_e = st.text_input("전문 영역")
             n_em = st.text_input("이메일 주소")
             n_g = st.text_area("멘토 인사말")
@@ -273,30 +268,24 @@ with tab4:
                 st.success("멘토가 등록되었습니다.")
                 st.rerun()
         
-        # [수정] 등록된 멘토 관리 (직급 필드 추가)
         with st.expander("📋 등록된 멘토 관리 (수정/삭제)", expanded=True):
-            if not st.session_state.mentors_data:
-                st.info("현재 등록된 멘토가 없습니다.")
-            else:
-                for i, m in enumerate(st.session_state.mentors_data):
-                    st.markdown(f"**[{m['name']}] 정보 관리**")
-                    col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1.5])
-                    u_name = col1.text_input("이름", value=m.get('name',''), key=f"un_{i}")
-                    u_pos = col2.text_input("직급", value=m.get('position',''), key=f"up_{i}")
-                    u_team = col3.text_input("팀명", value=m.get('team',''), key=f"ut_{i}")
-                    u_pw = col4.text_input("비번", value=m.get('pw',''), key=f"upw_{i}")
-                    u_email = col5.text_input("이메일", value=m.get('email',''), key=f"uem_{i}")
-                    
-                    u_exp = st.text_input("전문영역", value=m.get('expertise',''), key=f"ue_{i}")
-                    u_greet = st.text_area("인사말", value=m.get('greeting',''), key=f"ug_{i}")
-                    
-                    btn1, btn2 = st.columns([1, 8])
-                    if btn1.button("💾 저장", key=f"us_{i}"):
-                        st.session_state.mentors_data[i].update({"name":u_name, "position":u_pos, "team":u_team, "pw":u_pw, "expertise":u_exp, "greeting":u_greet, "email":u_email})
-                        safe_save(ws_mentors, st.session_state.mentors_data)
-                        st.success("수정 완료!")
-                    if btn2.button("❌ 삭제", key=f"ud_{i}"):
-                        st.session_state.mentors_data.pop(i)
-                        safe_save(ws_mentors, st.session_state.mentors_data)
-                        st.rerun()
-                    st.divider()
+            for i, m in enumerate(st.session_state.mentors_data):
+                st.markdown(f"**[{m['name']}] 정보 관리**")
+                col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1.5])
+                u_name = col1.text_input("이름", value=m.get('name',''), key=f"un_{i}")
+                u_pos = col2.text_input("직급", value=m.get('position',''), key=f"up_{i}")
+                u_team = col3.text_input("팀명", value=m.get('team',''), key=f"ut_{i}")
+                u_pw = col4.text_input("비번", value=m.get('pw',''), key=f"upw_{i}")
+                u_email = col5.text_input("이메일", value=m.get('email',''), key=f"uem_{i}")
+                u_exp = st.text_input("전문영역", value=m.get('expertise',''), key=f"ue_{i}")
+                u_greet = st.text_area("인사말", value=m.get('greeting',''), key=f"ug_{i}")
+                btn1, btn2 = st.columns([1, 8])
+                if btn1.button("💾 저장", key=f"us_{i}"):
+                    st.session_state.mentors_data[i].update({"name":u_name, "position":u_pos, "team":u_team, "pw":u_pw, "expertise":u_exp, "greeting":u_greet, "email":u_email})
+                    safe_save(ws_mentors, st.session_state.mentors_data)
+                    st.success("수정 완료!")
+                if btn2.button("❌ 삭제", key=f"ud_{i}"):
+                    st.session_state.mentors_data.pop(i)
+                    safe_save(ws_mentors, st.session_state.mentors_data)
+                    st.rerun()
+                st.divider()
