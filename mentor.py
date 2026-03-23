@@ -3,12 +3,15 @@ import datetime
 import uuid
 import pandas as pd
 import gspread
+import smtplib
+from email.mime.text import MIMEText
+from email.header import Header
 from oauth2client.service_account import ServiceAccountCredentials
 
 # [1] 브라우저 및 페이지 기본 설정
 st.set_page_config(page_title="DaeHanFeed Mentoring", page_icon="🤝", layout="wide")
 
-# [2] 세션 상태 초기화 (관리자 로그인 여부 확인용)
+# [2] 세션 상태 초기화
 if "admin_logged_in" not in st.session_state:
     st.session_state.admin_logged_in = False
 
@@ -19,8 +22,6 @@ style_css = """
         margin-bottom: 20px;
     }
 """
-
-# 관리자 로그인이 되어 있지 않은 경우에만 오른쪽 상단 메뉴와 헤더를 숨깁니다.
 if not st.session_state.admin_logged_in:
     style_css += """
     #MainMenu {visibility: hidden;}
@@ -28,11 +29,9 @@ if not st.session_state.admin_logged_in:
     footer {visibility: hidden;}
     .stDeployButton {display:none;}
     """
-
 style_css += "</style>"
 st.markdown(style_css, unsafe_allow_html=True)
 
-# 프로그램 메인 타이틀 (수정: DaeHanFeed 반영)
 st.title("🤝 DaeHanFeed Mentoring")
 st.caption("대한사료 임직원 간의 성장을 돕는 실시간 소통 플랫폼")
 st.markdown("---")
@@ -45,7 +44,6 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 
 @st.cache_resource
 def init_gspread():
-    # ⚠️ st.secrets에 구글 API 키가 등록되어 있어야 합니다.
     creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
     client = gspread.authorize(creds)
     doc = client.open("멘토링예약DB")
@@ -66,7 +64,6 @@ ws_slots, ws_res, ws_mentors, ws_admin = init_gspread()
 def load_data():
     try: st.session_state.admin_info = ws_admin.get_all_records()[0]
     except: st.session_state.admin_info = {"id": "admin", "pw": "dhfeed1947"}
-    
     st.session_state.mentors_data = ws_mentors.get_all_records()
     
     slots = ws_slots.get_all_records()
@@ -96,8 +93,32 @@ if "data_loaded" not in st.session_state:
     load_data()
     st.session_state.data_loaded = True
 
+# ==========================================
+# 📧 [실전] Dooray! SMTP 이메일 발송 함수
+# ==========================================
 def send_email(to_email, subject, body):
-    st.toast(f"📧 [메일 발송] {to_email}\n제목: {subject}", icon="✉️")
+    # Dooray SMTP 설정
+    SMTP_SERVER = "smtp.dooray.com"
+    SMTP_PORT = 465 # SSL
+    
+    # Secrets에서 계정 정보 로드
+    SMTP_USER = st.secrets["email"]["smtp_user"]
+    SMTP_PW = st.secrets["email"]["smtp_password"]
+    
+    try:
+        msg = MIMEText(body, 'plain', 'utf-8')
+        msg['Subject'] = Header(subject, 'utf-8')
+        msg['From'] = SMTP_USER
+        msg['To'] = to_email
+        
+        # SSL 연결 및 발송
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+            server.login(SMTP_USER, SMTP_PW)
+            server.sendmail(SMTP_USER, to_email, msg.as_string())
+        
+        st.toast(f"✅ 메일 발송 완료: {to_email}", icon="📧")
+    except Exception as e:
+        st.error(f"❌ 메일 발송 중 오류가 발생했습니다: {e}")
 
 mentor_names = ["선택해주세요"] + [m['name'] for m in st.session_state.mentors_data]
 
@@ -179,7 +200,15 @@ with tab1:
             new_res = {"id": str(uuid.uuid4()), "mentor": selected_m, "mentee_name": mentee_name, "mentee_position": mentee_pos, "mentee_team": mentee_team, "mentee_email": mentee_email, "date": sel_date, "start_time": t_start, "end_time": t_end, "topic": m_topic, "location": sel_location, "status": "대기중"}
             st.session_state.reservations.append(new_res)
             safe_save(ws_res, st.session_state.reservations)
-            st.balloons(); st.success("예약 신청이 완료되었습니다!")
+            
+            # [실전] 멘토에게 알림 메일 발송
+            mentor_info = next((m for m in st.session_state.mentors_data if m['name']==selected_m), None)
+            if mentor_info and mentor_info.get('email'):
+                subject = f"[DaeHanFeed] 새로운 멘토링 신청이 접수되었습니다."
+                body = f"안녕하세요, {selected_m} 멘토님!\n\n{mentee_name}님께서 멘토링을 신청하셨습니다.\n- 일시: {sel_date} ({t_start}~{t_end})\n- 주제: {m_topic}\n\n시스템에 접속하여 예약을 승인해 주세요."
+                send_email(mentor_info['email'], subject, body)
+            
+            st.balloons(); st.success("예약 신청이 완료되었습니다!"); st.rerun()
 
 # --- [💼 탭 2: 멘토 일정 관리] ---
 with tab2:
@@ -235,21 +264,30 @@ with tab3:
                         if conflict: st.error("🚫 승인 불가: 해당 시간대에 이미 승인된 다른 예약이 존재합니다.")
                         else:
                             reservation['status'] = "승인됨"; safe_save(ws_res, st.session_state.reservations)
-                            send_email(reservation['mentee_email'], "[DaeHanFeed Mentoring] 예약 승인", "상담 예약이 승인되었습니다.")
+                            # [실전] 멘티에게 승인 메일 발송
+                            if reservation.get('mentee_email'):
+                                subject = "[DaeHanFeed Mentoring] 예약이 승인되었습니다!"
+                                body = f"안녕하세요, {reservation['mentee_name']}님!\n\n신청하신 멘토링이 승인되었습니다.\n- 일시: {reservation['date']} ({reservation['start_time']}~{reservation['end_time']})\n- 장소: {reservation.get('location', '장소 미지정')}\n- 멘토: {reservation['mentor']}\n\n늦지 않게 장소로 참석해 주세요."
+                                send_email(reservation['mentee_email'], subject, body)
                             st.success("예약이 승인되었습니다."); st.rerun()
 
                     if r['status'] == "대기중":
                         ca, cb = st.columns(2)
                         if ca.button("✅ 예약 승인", key=f"ok_{r['id']}"): attempt_approve(r)
                         if cb.button("❌ 예약 거절", key=f"no_{r['id']}"):
-                            r['status'] = "거절됨"; safe_save(ws_res, st.session_state.reservations); st.rerun()
+                            r['status'] = "거절됨"; safe_save(ws_res, st.session_state.reservations)
+                            # [실전] 멘티에게 거절 알림 메일 발송
+                            if r.get('mentee_email'):
+                                subject = "[DaeHanFeed Mentoring] 예약이 거절되었습니다."
+                                body = f"안녕하세요, {r['mentee_name']}님.\n\n아쉽게도 신청하신 멘토링이 멘토의 사정으로 거절되었습니다.\n다른 일정이나 멘토를 선택하여 다시 신청해 주세요."
+                                send_email(r['mentee_email'], subject, body)
+                            st.rerun()
                     elif r['status'] == "승인됨":
                         if st.button("🚫 예약 취소", key=f"can_{r['id']}"):
                             r['status']="취소됨"; safe_save(ws_res, st.session_state.reservations); st.rerun()
 
 # --- [👑 탭 4: 관리자 메뉴] ---
 with tab4:
-    # 수정: 인사총무팀 반영
     st.subheader("👑 인사총무팀 전용 관리자 시스템")
     if not st.session_state.admin_logged_in:
         a_id, a_pw = st.text_input("Admin ID"), st.text_input("Admin PW", type="password")
