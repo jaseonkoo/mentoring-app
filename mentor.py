@@ -6,7 +6,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 # [1] 브라우저 및 페이지 기본 설정
-st.set_page_config(page_title="Daehan Feed Mentoring", page_icon="🤝", layout="wide")
+st.set_page_config(page_title="DaeHanFeed Mentoring", page_icon="🤝", layout="wide")
 
 # [2] 디자인 발란스 및 여백 조정을 위한 마스터 CSS
 st.markdown("""
@@ -21,8 +21,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 프로그램 메인 타이틀
-st.title("🤝 Daehan Feed Mentoring")
+# 프로그램 메인 타이틀 (수정: Daehan Feed -> DaeHanFeed)
+st.title("🤝 DaeHanFeed Mentoring")
 st.caption("대한사료 임직원 간의 성장을 돕는 실시간 소통 플랫폼")
 st.markdown("---")
 
@@ -124,7 +124,7 @@ with tab1:
 
     st.markdown("<br>", unsafe_allow_html=True)
     t_start = t_end = None
-    sel_location = "" # 선택된 장소 저장용
+    sel_location = "" 
 
     col_main, col_profile = st.columns([1.2, 1])
 
@@ -140,7 +140,7 @@ with tab1:
             for s in slots_found:
                 loc_txt = s.get('location', '장소 미지정')
                 st.write(f"⏰ **{s['start'].strftime('%H:%M')} ~ {s['end'].strftime('%H:%M')}** | 📍 {loc_txt}")
-                sel_location = loc_txt # 장소 정보 확보
+                sel_location = loc_txt 
             
             cs, ce = st.columns(2)
             with cs: t_start = st.time_input("시작 시간", slots_found[0]['start'])
@@ -176,7 +176,7 @@ with tab1:
                 "id": str(uuid.uuid4()), "mentor": selected_m, "mentee_name": mentee_name, 
                 "mentee_position": mentee_pos, "mentee_team": mentee_team, "mentee_email": mentee_email,
                 "date": sel_date, "start_time": t_start, "end_time": t_end, "topic": m_topic, 
-                "location": sel_location, "status": "대기중" # 장소 정보 저장 추가
+                "location": sel_location, "status": "대기중" 
             }
             st.session_state.reservations.append(new_res)
             safe_save(ws_res, st.session_state.reservations)
@@ -220,7 +220,7 @@ with tab2:
                     safe_save(ws_slots, st.session_state.available_slots)
                     st.rerun()
 
-# --- [📋 탭 3: 멘토 예약 관리 (일자/장소 추가 및 재승인)] ---
+# --- [📋 탭 3: 멘토 예약 관리] ---
 with tab3:
     st.subheader("📋 멘티 신청 현황 관리")
     m_sel_t3 = st.selectbox("본인 성함 선택", mentor_names, key="m_sel_t3")
@@ -233,11 +233,9 @@ with tab3:
                 m_pos = f" {r.get('mentee_position','')}" if r.get('mentee_position','') else ""
                 m_team = f" ({r.get('mentee_team','')})" if r.get('mentee_team','') else ""
                 
-                # [수정] 일자 정보를 아코디언 제목에 미리 노출하여 가시성 확보
                 expander_title = f"[{r['status']}] {r['date']} | {r['mentee_name']}{m_pos}님{m_team}"
                 
                 with st.expander(expander_title):
-                    # [수정] 일자와 장소 정보를 상세 내용에 추가
                     st.write(f"📅 **일자:** {r['date']}")
                     st.write(f"⏰ **시간:** {r['start_time']} ~ {r['end_time']}")
                     st.write(f"📍 **장소:** {r.get('location', '장소 미지정')}")
@@ -258,7 +256,8 @@ with tab3:
                         else:
                             reservation['status'] = "승인됨"
                             safe_save(ws_res, st.session_state.reservations)
-                            send_email(reservation['mentee_email'], "[Daehan Feed Mentoring] 예약 승인", "상담 예약이 승인되었습니다.")
+                            # 수정: 이메일 제목의 회사명 변경
+                            send_email(reservation['mentee_email'], "[DaeHanFeed Mentoring] 예약 승인", "상담 예약이 승인되었습니다.")
                             st.success("예약이 승인되었습니다.")
                             st.rerun()
 
@@ -275,7 +274,8 @@ with tab3:
 
 # --- [👑 탭 4: 관리자 메뉴] ---
 with tab4:
-    st.subheader("👑 인사팀 전용 관리자 시스템")
+    # 수정: 인사팀 -> 인사총무팀
+    st.subheader("👑 인사총무팀 전용 관리자 시스템")
     if not st.session_state.get("admin_logged_in", False):
         a_id, a_pw = st.text_input("Admin ID"), st.text_input("Admin PW", type="password")
         if st.button("관리자 로그인"):
