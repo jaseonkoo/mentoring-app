@@ -11,7 +11,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # [1] 브라우저 및 페이지 기본 설정
 st.set_page_config(page_title="DaeHanFeed Mentoring", page_icon="🤝", layout="wide")
 
-# 시스템 접속 주소 (멘토 알림용으로만 사용됨)
+# 시스템 접속 주소 (멘토 알림용)
 SYSTEM_URL = "https://share.streamlit.io/jaseonkoo/mentoring-app/main/mentor.py"
 
 # [2] 세션 상태 초기화
@@ -197,7 +197,6 @@ with tab1:
             st.session_state.reservations.append(new_res)
             safe_save(ws_res, st.session_state.reservations)
             
-            # 멘토 알림 메일 (시스템 주소 유지)
             mentor_info = next((m for m in st.session_state.mentors_data if m['name']==selected_m), None)
             if mentor_info and mentor_info.get('email'):
                 subject = f"[DaeHanFeed 멘토링] 새로운 멘토링 신청이 접수되었습니다."
@@ -211,7 +210,6 @@ with tab1:
                     f"감사합니다."
                 )
                 send_email(mentor_info['email'], subject, body)
-            
             st.balloons(); st.success("예약 신청이 완료되었습니다!"); st.rerun()
 
 # --- [💼 탭 2: 멘토 일정 관리] ---
@@ -268,7 +266,6 @@ with tab3:
                         if conflict: st.error("🚫 승인 불가: 해당 시간대에 이미 승인된 다른 예약이 존재합니다.")
                         else:
                             reservation['status'] = "승인됨"; safe_save(ws_res, st.session_state.reservations)
-                            # [수정] 멘티 최종 승인 안내 메일 (상세 확인 주소 라인 삭제)
                             if reservation.get('mentee_email'):
                                 subject = "[DaeHanFeed 멘토링] 신청하신 멘토링 예약이 승인되었습니다!"
                                 body = (
@@ -320,9 +317,32 @@ with tab4:
         with st.expander("📋 등록된 멘토 관리 (수정/삭제)", expanded=True):
             for i, m in enumerate(st.session_state.mentors_data):
                 st.markdown(f"**[{m['name']}] 정보 관리**")
+                
+                # [수정] 모든 필드를 수정할 수 있도록 입력창 배치
                 col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1.5])
-                u_name, u_pos, u_team, u_pw, u_email = col1.text_input("이름", m.get('name',''), key=f"un_{i}"), col2.text_input("직급", m.get('position',''), key=f"up_{i}"), col3.text_input("팀명", m.get('team',''), key=f"ut_{i}"), col4.text_input("비번", m.get('pw',''), key=f"upw_{i}"), col5.text_input("이메일", m.get('email',''), key=f"uem_{i}")
-                if st.button("💾 저장", key=f"us_{i}"):
-                    st.session_state.mentors_data[i].update({"name":u_name, "position":u_pos, "team":u_team, "pw":u_pw, "email":u_email})
-                    safe_save(ws_mentors, st.session_state.mentors_data); st.success("수정 완료!")
+                u_name = col1.text_input("이름", m.get('name',''), key=f"un_{i}")
+                u_pos = col2.text_input("직급", m.get('position',''), key=f"up_{i}")
+                u_team = col3.text_input("팀명", m.get('team',''), key=f"ut_{i}")
+                u_pw = col4.text_input("비번", m.get('pw',''), key=f"upw_{i}")
+                u_email = col5.text_input("이메일", m.get('email',''), key=f"uem_{i}")
+                
+                # [추가] 전문 영역과 인사말 수정 필드
+                u_exp = st.text_input("전문 영역", m.get('expertise',''), key=f"ue_{i}")
+                u_greet = st.text_area("멘토 인사말", m.get('greeting',''), key=f"ug_{i}")
+                
+                btn1, btn2 = st.columns([1, 8])
+                if btn1.button("💾 저장", key=f"us_{i}"):
+                    # 모든 필드 업데이트 반영
+                    st.session_state.mentors_data[i].update({
+                        "name": u_name, "position": u_pos, "team": u_team, 
+                        "pw": u_pw, "email": u_email, "expertise": u_exp, "greeting": u_greet
+                    })
+                    safe_save(ws_mentors, st.session_state.mentors_data)
+                    st.success(f"{u_name} 멘토 정보가 수정되었습니다.")
+                    st.rerun()
+                
+                if btn2.button("❌ 삭제", key=f"ud_{i}"):
+                    st.session_state.mentors_data.pop(i)
+                    safe_save(ws_mentors, st.session_state.mentors_data)
+                    st.rerun()
                 st.divider()
