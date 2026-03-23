@@ -11,14 +11,14 @@ from oauth2client.service_account import ServiceAccountCredentials
 # [1] 브라우저 및 페이지 기본 설정
 st.set_page_config(page_title="DaeHanFeed Mentoring", page_icon="🤝", layout="wide")
 
-# [실전 팁] 여기에 차장님의 실제 시스템 주소를 넣어주세요!
+# 시스템 접속 주소 (멘토 알림용으로만 사용됨)
 SYSTEM_URL = "https://share.streamlit.io/jaseonkoo/mentoring-app/main/mentor.py"
 
 # [2] 세션 상태 초기화
 if "admin_logged_in" not in st.session_state:
     st.session_state.admin_logged_in = False
 
-# [3] 디자인 및 메뉴 제어 CSS
+# [3] 디자인 및 메뉴 제어 CSS (관리자 로그인 시에만 메뉴 노출)
 style_css = """
     <style>
     .stTextInput, .stSelectbox, .stDateInput, .stTextArea, .stTimeInput {
@@ -197,7 +197,7 @@ with tab1:
             st.session_state.reservations.append(new_res)
             safe_save(ws_res, st.session_state.reservations)
             
-            # [수정] 멘토 알림 메일 문구 고도화
+            # 멘토 알림 메일 (시스템 주소 유지)
             mentor_info = next((m for m in st.session_state.mentors_data if m['name']==selected_m), None)
             if mentor_info and mentor_info.get('email'):
                 subject = f"[DaeHanFeed 멘토링] 새로운 멘토링 신청이 접수되었습니다."
@@ -268,7 +268,7 @@ with tab3:
                         if conflict: st.error("🚫 승인 불가: 해당 시간대에 이미 승인된 다른 예약이 존재합니다.")
                         else:
                             reservation['status'] = "승인됨"; safe_save(ws_res, st.session_state.reservations)
-                            # [수정] 멘티 승인 안내 메일
+                            # [수정] 멘티 최종 승인 안내 메일 (상세 확인 주소 라인 삭제)
                             if reservation.get('mentee_email'):
                                 subject = "[DaeHanFeed 멘토링] 신청하신 멘토링 예약이 승인되었습니다!"
                                 body = (
@@ -277,8 +277,7 @@ with tab3:
                                     f"- 일시: {reservation['date']} ({reservation['start_time']} ~ {reservation['end_time']})\n"
                                     f"- 장소: {reservation.get('location', '장소 미지정')}\n"
                                     f"- 멘토: {reservation['mentor']} 멘토님\n\n"
-                                    f"일정을 확인하시어 늦지 않게 참석해 주시기 바랍니다.\n"
-                                    f"▶ 상세 확인: {SYSTEM_URL}\n\n"
+                                    f"일정을 확인하시어 늦지 않게 참석해 주시기 바랍니다.\n\n"
                                     f"감사합니다."
                                 )
                                 send_email(reservation['mentee_email'], subject, body)
@@ -291,7 +290,7 @@ with tab3:
                             r['status'] = "거절됨"; safe_save(ws_res, st.session_state.reservations)
                             if r.get('mentee_email'):
                                 subject = "[DaeHanFeed 멘토링] 신청하신 예약이 거절되었습니다."
-                                body = f"안녕하세요, {r['mentee_name']}님.\n\n아쉽게도 신청하신 멘토링이 멘토의 사정으로 거절되었습니다.\n시스템에 접속하여 다른 일정이나 멘토를 선택해 다시 신청해 주세요.\n▶ 시스템 접속: {SYSTEM_URL}"
+                                body = f"안녕하세요, {r['mentee_name']}님.\n\n아쉽게도 신청하신 멘토링이 멘토의 사정으로 거절되었습니다.\n다른 일정이나 멘토를 선택해 다시 신청해 주세요."
                                 send_email(r['mentee_email'], subject, body)
                             st.rerun()
                     elif r['status'] == "승인됨":
