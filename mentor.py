@@ -11,19 +11,45 @@ from oauth2client.service_account import ServiceAccountCredentials
 # [1] 브라우저 및 페이지 기본 설정
 st.set_page_config(page_title="DaeHanFeed Mentoring", page_icon="🤝", layout="wide")
 
-# 시스템 접속 주소 (멘토 알림용)
+# 시스템 접속 주소 (메일 알림용)
 SYSTEM_URL = "https://share.streamlit.io/jaseonkoo/mentoring-app/main/mentor.py"
 
 # [2] 세션 상태 초기화
 if "admin_logged_in" not in st.session_state:
     st.session_state.admin_logged_in = False
 
-# [3] 디자인 및 메뉴 제어 CSS (관리자 로그인 시에만 메뉴 노출)
+# [3] ✨ 모바일 겹침 방지 및 디자인 제어 CSS
 style_css = """
     <style>
+    /* 기본 입력창 간격 */
     .stTextInput, .stSelectbox, .stDateInput, .stTextArea, .stTimeInput {
-        margin-bottom: 20px;
+        margin-bottom: 15px !important;
     }
+
+    /* 📱 모바일(화면 너비 768px 이하) 대응 스타일 */
+    @media (max-width: 768px) {
+        /* 1. 글자가 겹치지 않도록 행간(Line-height) 확보 및 줄바꿈 허용 */
+        div[data-testid="stMarkdownContainer"] p, 
+        div[data-testid="stExpander"] details summary div p {
+            line-height: 1.6 !important;
+            font-size: 14px !important;
+            white-space: normal !important; /* 모바일에서 좁을 때 아래로 자동 줄바꿈 */
+            word-break: keep-all !important;
+            display: block !important;
+        }
+
+        /* 2. 아이콘과 텍스트가 엉키지 않게 여백 추가 */
+        div.stMarkdown {
+            margin-bottom: 8px !important;
+        }
+        
+        /* 3. 버튼 크기 모바일에 맞춰 최적화 */
+        .stButton button {
+            width: 100% !important;
+        }
+    }
+
+    /* 관리자 로그인 전 메뉴 숨기기 */
 """
 if not st.session_state.admin_logged_in:
     style_css += """
@@ -200,15 +226,7 @@ with tab1:
             mentor_info = next((m for m in st.session_state.mentors_data if m['name']==selected_m), None)
             if mentor_info and mentor_info.get('email'):
                 subject = f"[DaeHanFeed 멘토링] 새로운 멘토링 신청이 접수되었습니다."
-                body = (
-                    f"안녕하세요, {selected_m} 멘토님!\n\n"
-                    f"{mentee_name}님께서 멘토링을 신청하셨습니다.\n\n"
-                    f"- 일시: {sel_date} ({t_start} ~ {t_end})\n"
-                    f"- 주제: {m_topic}\n\n"
-                    f"시스템에 접속하여 예약 신청을 확인하고 승인해 주세요.\n"
-                    f"▶ 시스템 접속: {SYSTEM_URL}\n\n"
-                    f"감사합니다."
-                )
+                body = f"안녕하세요, {selected_m} 멘토님!\n\n{mentee_name}님께서 멘토링을 신청하셨습니다.\n\n- 일시: {sel_date} ({t_start} ~ {t_end})\n- 주제: {m_topic}\n\n시스템에 접속하여 확인해 주세요.\n▶ {SYSTEM_URL}"
                 send_email(mentor_info['email'], subject, body)
             st.balloons(); st.success("예약 신청이 완료되었습니다!"); st.rerun()
 
@@ -219,11 +237,6 @@ with tab2:
     if m_login != "선택해주세요":
         m_info = next((m for m in st.session_state.mentors_data if m['name']==m_login), None)
         if m_info and st.text_input("멘토 비밀번호 입력", type="password", key="m_pw_t2") == str(m_info['pw']):
-            with st.expander("🔑 내 비밀번호 변경하기"):
-                new_pw = st.text_input("새 비밀번호", type="password")
-                if st.button("비밀번호 업데이트"):
-                    m_info['pw'] = new_pw; safe_save(ws_mentors, st.session_state.mentors_data); st.success("비밀번호 변경 완료!")
-
             st.markdown("#### ✨ 새로운 상담 시간 및 장소 등록")
             c1, c2, c3, c4 = st.columns(4)
             with c1: d_val = st.date_input("날짜", datetime.date.today(), key="d_t2")
@@ -263,33 +276,20 @@ with tab3:
                             if (existing['mentor'] == reservation['mentor'] and existing['date'] == reservation['date'] and existing['status'] == "승인됨" and existing['id'] != reservation['id']):
                                 if max(reservation['start_time'], existing['start_time']) < min(reservation['end_time'], existing['end_time']):
                                     conflict = True; break
-                        if conflict: st.error("🚫 승인 불가: 해당 시간대에 이미 승인된 다른 예약이 존재합니다.")
+                        if conflict: st.error("🚫 승인 불가: 시간 중복")
                         else:
                             reservation['status'] = "승인됨"; safe_save(ws_res, st.session_state.reservations)
                             if reservation.get('mentee_email'):
-                                subject = "[DaeHanFeed 멘토링] 신청하신 멘토링 예약이 승인되었습니다!"
-                                body = (
-                                    f"안녕하세요, {reservation['mentee_name']}님!\n\n"
-                                    f"신청하신 멘토링 예약이 승인되었습니다.\n\n"
-                                    f"- 일시: {reservation['date']} ({reservation['start_time']} ~ {reservation['end_time']})\n"
-                                    f"- 장소: {reservation.get('location', '장소 미지정')}\n"
-                                    f"- 멘토: {reservation['mentor']} 멘토님\n\n"
-                                    f"일정을 확인하시어 늦지 않게 참석해 주시기 바랍니다.\n\n"
-                                    f"감사합니다."
-                                )
+                                subject = "[DaeHanFeed 멘토링] 신청하신 예약이 승인되었습니다!"
+                                body = f"안녕하세요, {reservation['mentee_name']}님!\n\n신청하신 멘토링이 승인되었습니다.\n\n- 일시: {reservation['date']} ({reservation['start_time']} ~ {reservation['end_time']})\n- 장소: {reservation.get('location', '장소 미지정')}\n- 멘토: {reservation['mentor']}\n\n늦지 않게 참석해 주세요."
                                 send_email(reservation['mentee_email'], subject, body)
-                            st.success("예약이 승인되었습니다."); st.rerun()
+                            st.success("승인 완료!"); st.rerun()
 
                     if r['status'] == "대기중":
                         ca, cb = st.columns(2)
                         if ca.button("✅ 예약 승인", key=f"ok_{r['id']}"): attempt_approve(r)
                         if cb.button("❌ 예약 거절", key=f"no_{r['id']}"):
-                            r['status'] = "거절됨"; safe_save(ws_res, st.session_state.reservations)
-                            if r.get('mentee_email'):
-                                subject = "[DaeHanFeed 멘토링] 신청하신 예약이 거절되었습니다."
-                                body = f"안녕하세요, {r['mentee_name']}님.\n\n아쉽게도 신청하신 멘토링이 멘토의 사정으로 거절되었습니다.\n다른 일정이나 멘토를 선택해 다시 신청해 주세요."
-                                send_email(r['mentee_email'], subject, body)
-                            st.rerun()
+                            r['status'] = "거절됨"; safe_save(ws_res, st.session_state.reservations); st.rerun()
                     elif r['status'] == "승인됨":
                         if st.button("🚫 예약 취소", key=f"can_{r['id']}"):
                             r['status']="취소됨"; safe_save(ws_res, st.session_state.reservations); st.rerun()
@@ -302,7 +302,7 @@ with tab4:
         if st.button("관리자 로그인"):
             if a_id == st.session_state.admin_info['id'] and a_pw == str(st.session_state.admin_info['pw']):
                 st.session_state.admin_logged_in = True; st.rerun()
-            else: st.error("로그인 정보가 틀립니다.")
+            else: st.error("로그인 정보 오류")
     else:
         if st.button("관리자 로그아웃"): st.session_state.admin_logged_in = False; st.rerun()
         st.divider()
@@ -317,32 +317,16 @@ with tab4:
         with st.expander("📋 등록된 멘토 관리 (수정/삭제)", expanded=True):
             for i, m in enumerate(st.session_state.mentors_data):
                 st.markdown(f"**[{m['name']}] 정보 관리**")
-                
-                # [수정] 모든 필드를 수정할 수 있도록 입력창 배치
                 col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1.5])
-                u_name = col1.text_input("이름", m.get('name',''), key=f"un_{i}")
-                u_pos = col2.text_input("직급", m.get('position',''), key=f"up_{i}")
-                u_team = col3.text_input("팀명", m.get('team',''), key=f"ut_{i}")
-                u_pw = col4.text_input("비번", m.get('pw',''), key=f"upw_{i}")
-                u_email = col5.text_input("이메일", m.get('email',''), key=f"uem_{i}")
-                
-                # [추가] 전문 영역과 인사말 수정 필드
+                u_name, u_pos, u_team = col1.text_input("이름", m.get('name',''), key=f"un_{i}"), col2.text_input("직급", m.get('position',''), key=f"up_{i}"), col3.text_input("팀명", m.get('team',''), key=f"ut_{i}")
+                u_pw, u_email = col4.text_input("비번", m.get('pw',''), key=f"upw_{i}"), col5.text_input("이메일", m.get('email',''), key=f"uem_{i}")
                 u_exp = st.text_input("전문 영역", m.get('expertise',''), key=f"ue_{i}")
                 u_greet = st.text_area("멘토 인사말", m.get('greeting',''), key=f"ug_{i}")
                 
-                btn1, btn2 = st.columns([1, 8])
-                if btn1.button("💾 저장", key=f"us_{i}"):
-                    # 모든 필드 업데이트 반영
-                    st.session_state.mentors_data[i].update({
-                        "name": u_name, "position": u_pos, "team": u_team, 
-                        "pw": u_pw, "email": u_email, "expertise": u_exp, "greeting": u_greet
-                    })
-                    safe_save(ws_mentors, st.session_state.mentors_data)
-                    st.success(f"{u_name} 멘토 정보가 수정되었습니다.")
-                    st.rerun()
-                
-                if btn2.button("❌ 삭제", key=f"ud_{i}"):
-                    st.session_state.mentors_data.pop(i)
-                    safe_save(ws_mentors, st.session_state.mentors_data)
-                    st.rerun()
+                b1, b2 = st.columns([1, 8])
+                if b1.button("💾 저장", key=f"us_{i}"):
+                    st.session_state.mentors_data[i].update({"name": u_name, "position": u_pos, "team": u_team, "pw": u_pw, "email": u_email, "expertise": u_exp, "greeting": u_greet})
+                    safe_save(ws_mentors, st.session_state.mentors_data); st.success("수정 완료!"); st.rerun()
+                if b2.button("❌ 삭제", key=f"ud_{i}"):
+                    st.session_state.mentors_data.pop(i); safe_save(ws_mentors, st.session_state.mentors_data); st.rerun()
                 st.divider()
