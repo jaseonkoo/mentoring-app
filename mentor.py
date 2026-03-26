@@ -11,27 +11,27 @@ from oauth2client.service_account import ServiceAccountCredentials
 # [1] 브라우저 및 페이지 기본 설정
 st.set_page_config(page_title="DaeHanFeed Mentoring", page_icon="🤝", layout="wide")
 
-# 시스템 접속 주소 (멘토 알림용)
+# 시스템 접속 주소
 SYSTEM_URL = "https://share.streamlit.io/jaseonkoo/mentoring-app/main/mentor.py"
 
 # [2] 세션 상태 초기화
 if "admin_logged_in" not in st.session_state:
     st.session_state.admin_logged_in = False
 
-# [3] 디자인 및 모바일 최적화 CSS (글자 겹침 방지)
+# [3] 디자인 및 모바일 최적화 CSS
 style_css = """
     <style>
     .stTextInput, .stSelectbox, .stDateInput, .stTextArea, .stTimeInput {
-        margin-bottom: 12px !important;
+        margin-bottom: 8px !important;
     }
     @media (max-width: 768px) {
         div[data-testid="stExpander"] details summary p { font-size: 15px !important; line-height: 1.5 !important; }
         div[data-testid="stExpander"] details summary span { font-size: 0 !important; color: transparent !important; }
     }
+    </style>
 """
 if not st.session_state.admin_logged_in:
-    style_css += "#MainMenu, header, footer, .stDeployButton {visibility: hidden; display:none;}"
-style_css += "</style>"
+    style_css += "<style>#MainMenu, header, footer, .stDeployButton {visibility: hidden; display:none;}</style>"
 st.markdown(style_css, unsafe_allow_html=True)
 
 st.title("🤝 DaeHanFeed Mentoring")
@@ -101,7 +101,7 @@ def send_email(to_email, subject, body):
         with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
             server.login(SMTP_USER, SMTP_PW)
             server.sendmail(SMTP_USER, to_email, msg.as_string())
-        st.toast(f"✅ 메일 발송 완료")
+        st.toast(f"✅ 알림 메일 발송 완료")
     except: pass
 
 mentor_names = ["선택해주세요"] + [m['name'] for m in st.session_state.mentors_data]
@@ -160,45 +160,55 @@ with tab4:
     else:
         if st.button("관리자 로그아웃", key="admin_logout_btn"): st.session_state.admin_logged_in = False; st.rerun()
         st.divider()
-        with st.expander("👨‍🏫 멘토 신규 등록"):
-            nc1, nc2, nc3, nc4 = st.columns(4)
-            n_m = nc1.text_input("성함", key="new_m_name")
-            n_p = nc2.text_input("직급", key="new_m_pos")
-            n_t = nc3.text_input("팀명", key="new_m_team")
-            n_pw = nc4.text_input("비번", key="new_m_pw")
-            n_e = st.text_input("전문분야", key="new_m_exp")
-            n_em = st.text_input("이메일", key="new_m_email")
+
+        # --- [1] 멘토 신규 등록 ---
+        with st.expander("👨‍🏫 멘토 신규 등록", expanded=False):
+            # 첫줄: 성함, 직급, 팀명, 비번
+            nr1_1, nr1_2, nr1_3, nr1_4 = st.columns(4)
+            n_m = nr1_1.text_input("성함", key="new_m_name")
+            n_p = nr1_2.text_input("직급", key="new_m_pos")
+            n_t = nr1_3.text_input("팀명", key="new_m_team")
+            n_pw = nr1_4.text_input("비번", key="new_m_pw")
+            # 두번째: 이메일, 전문분야
+            nr2_1, nr2_2 = st.columns([1.5, 2.5])
+            n_em = nr2_1.text_input("이메일", key="new_m_email")
+            n_e = nr2_2.text_input("전문분야", key="new_m_exp")
+            # 세번째: 인사말
             n_g = st.text_area("인사말", key="new_m_greet")
+            
             if st.button("멘토 등록하기", key="new_m_submit"):
                 st.session_state.mentors_data.append({"name":n_m, "position":n_p, "team":n_t, "pw":n_pw, "expertise":n_e, "greeting":n_g, "email":n_em})
                 safe_save(ws_mentors, st.session_state.mentors_data); st.success(f"{n_m}님 등록 완료!"); st.rerun()
-        
+
+        # --- [2] 멘토 정보 수정/삭제 ---
         with st.expander("📋 멘토 정보 수정/삭제", expanded=True):
             for i, m in enumerate(st.session_state.mentors_data):
                 st.markdown(f"**[{m['name']}] 정보 관리**")
-                col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1.5])
-                u_n = col1.text_input("이름", m.get('name',''), key=f"edit_n_{i}")
-                u_p = col2.text_input("직급", m.get('position',''), key=f"edit_p_{i}")
-                u_t = col3.text_input("팀명", m.get('team',''), key=f"edit_t_{i}")
-                u_pw = col4.text_input("비번", m.get('pw',''), key=f"edit_pw_{i}")
-                u_em = col5.text_input("이메일", m.get('email',''), key=f"edit_em_{i}")
-                
-                # ✨ [수정 완료] 신규 등록과 동일하게 필드 추가
-                u_exp = st.text_input("전문분야", m.get('expertise',''), key=f"edit_exp_{i}")
+                # 첫줄: 성함, 직급, 팀명, 비번
+                er1_1, er1_2, er1_3, er1_4 = st.columns(4)
+                u_n = er1_1.text_input("성함", m.get('name',''), key=f"edit_n_{i}")
+                u_p = er1_2.text_input("직급", m.get('position',''), key=f"edit_p_{i}")
+                u_t = er1_3.text_input("팀명", m.get('team',''), key=f"edit_t_{i}")
+                u_pw = er1_4.text_input("비번", m.get('pw',''), key=f"edit_pw_{i}")
+                # 두번째: 이메일, 전문분야
+                er2_1, er2_2 = st.columns([1.5, 2.5])
+                u_em = er2_1.text_input("이메일", m.get('email',''), key=f"edit_em_{i}")
+                u_exp = er2_2.text_input("전문분야", m.get('expertise',''), key=f"edit_exp_{i}")
+                # 세번째: 인사말
                 u_greet = st.text_area("인사말", m.get('greeting',''), key=f"edit_greet_{i}")
                 
-                b1, b2 = st.columns([1, 8])
-                if b1.button("💾 저장", key=f"save_btn_{i}"):
+                eb1, eb2 = st.columns([1, 8])
+                if eb1.button("💾 저장", key=f"save_btn_{i}"):
                     st.session_state.mentors_data[i].update({
                         "name":u_n, "position":u_p, "team":u_t, "pw":u_pw, "email":u_em,
                         "expertise":u_exp, "greeting":u_greet
                     })
                     safe_save(ws_mentors, st.session_state.mentors_data); st.success("수정 완료"); st.rerun()
-                if b2.button("❌ 삭제", key=f"del_btn_{i}"):
+                if eb2.button("❌ 삭제", key=f"del_btn_{i}"):
                     st.session_state.mentors_data.pop(i); safe_save(ws_mentors, st.session_state.mentors_data); st.rerun()
                 st.divider()
 
-# --- [💼 탭 2/3 로직 유지] ---
+# --- [탭 2/3 로직 유지] ---
 with tab2:
     st.subheader("💼 내 일정 관리")
     m_login_t2 = st.selectbox("본인 성함 선택", mentor_names, key="m_login_t2")
