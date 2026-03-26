@@ -18,13 +18,44 @@ SYSTEM_URL = "https://share.streamlit.io/jaseonkoo/mentoring-app/main/mentor.py"
 if "admin_logged_in" not in st.session_state:
     st.session_state.admin_logged_in = False
 
-# [3] 디자인 및 모바일 최적화 CSS
+# [3] 🛠️ [정밀 타격] 제목 노출 및 겹침 방지 CSS
 style_css = """
     <style>
-    .stTextInput, .stSelectbox, .stDateInput, .stTextArea, .stTimeInput { margin-bottom: 12px !important; }
+    /* 1. 입력창 사이 간격 */
+    .stTextInput, .stSelectbox, .stDateInput, .stTextArea, .stTimeInput {
+        margin-bottom: 12px !important;
+    }
+
+    /* 2. 📱 모바일(768px 이하) 디자인 정밀 제어 */
     @media (max-width: 768px) {
-        div[data-testid="stExpander"] details summary p { font-size: 15px !important; line-height: 1.5 !important; }
-        div[data-testid="stExpander"] details summary span { font-size: 0 !important; color: transparent !important; }
+        /* 익스팬더 제목(p 태그)은 무조건 보이게 강제 설정 */
+        div[data-testid="stExpander"] details summary p {
+            display: block !important;
+            visibility: visible !important;
+            font-size: 15px !important;
+            font-weight: 600 !important;
+            line-height: 1.5 !important;
+            color: #31333F !important;
+            margin: 0 !important;
+        }
+
+        /* 겹침의 원인인 화살표 텍스트(_arr 등)가 들어있는 span만 숨김 */
+        div[data-testid="stExpander"] details summary span {
+            display: none !important;
+        }
+        
+        /* 제목 영역이 눌리기 편하도록 높이 확보 */
+        div[data-testid="stExpander"] details summary {
+            min-height: 50px !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+
+        /* 탭 메뉴 폰트 조절 */
+        button[data-baseweb="tab"] {
+            font-size: 14px !important;
+            padding: 10px !important;
+        }
     }
     </style>
 """
@@ -33,7 +64,7 @@ if not st.session_state.admin_logged_in:
 st.markdown(style_css, unsafe_allow_html=True)
 
 st.title("🤝 DaeHanFeed Mentoring")
-st.caption("대한사료 임직원 소통 플랫폼")
+st.caption("대한사료 임직원 간의 성장을 돕는 실시간 소통 플랫폼")
 st.markdown("---")
 
 # ==========================================
@@ -57,7 +88,7 @@ def init_gspread():
 ws_slots, ws_res, ws_mentors, ws_admin = init_gspread()
 
 # ==========================================
-# 💾 데이터 처리 로직
+# 💾 데이터 로드/저장 로직
 # ==========================================
 def load_data():
     try: st.session_state.admin_info = ws_admin.get_all_records()[0]
@@ -117,87 +148,92 @@ with tab1:
         else:
             avail_summary = {}
             for s in st.session_state.available_slots:
-                # 이미 예약된 시간은 제외
                 is_booked = any(r for r in st.session_state.reservations if r['mentor']==s['mentor'] and r['date']==s['date'] and r['status'] not in ["거절됨", "취소됨"])
                 if not is_booked:
-                    # ✨ [해결] 중간에 '~' 기호를 추가하여 겹침 방지
                     info = f"{s['date'].strftime('%m/%d')} ({s['start'].strftime('%H:%M')} ~ {s['end'].strftime('%H:%M')})"
                     avail_summary[s['mentor']] = avail_summary.get(s['mentor'], set()) | {info}
-            
             for m, infos in avail_summary.items():
-                # 시간순 정렬하여 깔끔하게 표시
                 st.success(f"✅ **{m}** : {', '.join(sorted(list(infos)))}")
 
-    c_m1, c_m2 = st.columns(2)
-    with c_m1:
-        mentee_name = st.text_input("신청자 성함", key="mentee_name_input")
-        mentee_pos = st.text_input("신청자 직급", key="mentee_pos_input")
-    with c_m2:
-        mentee_team = st.text_input("신청자 팀명", key="mentee_team_input")
-        mentee_email = st.text_input("사내 이메일 주소", key="mentee_email_input")
+    c1, c2 = st.columns(2)
+    with c1:
+        mentee_name = st.text_input("신청자 성함", key="m_name_t1")
+        mentee_pos = st.text_input("신청자 직급", key="m_pos_t1")
+    with c2:
+        mentee_team = st.text_input("신청자 팀명", key="m_team_t1")
+        mentee_email = st.text_input("사내 이메일 주소", key="m_email_t1")
 
-    selected_m = st.selectbox("멘토 선택", mentor_names, key="mentor_select")
-    sel_date = st.date_input("날짜 선택", datetime.date.today() + datetime.timedelta(days=1), key="date_select")
+    selected_m = st.selectbox("멘토 선택", mentor_names, key="m_sel_t1")
+    sel_date = st.date_input("날짜 선택", datetime.date.today() + datetime.timedelta(days=1), key="d_sel_t1")
     
     slots = [s for s in st.session_state.available_slots if s['mentor']==selected_m and s['date']==sel_date]
     if slots:
         st.info(f"📍 {slots[0].get('location','-')} | ⏰ {slots[0]['start']} ~ {slots[0]['end']}")
-        topic = st.text_area("상담 주제 (필수)", key="topic_input")
-        if st.button("🚀 예약 신청", type="primary", use_container_width=True, key="submit_btn"):
+        topic = st.text_area("상담 주제 (필수)", key="topic_t1")
+        if st.button("🚀 예약 신청", type="primary", use_container_width=True, key="btn_t1"):
             if not mentee_name or not topic: st.error("성함과 주제를 입력해주세요.")
             else:
                 new_res = {"id": str(uuid.uuid4()), "mentor": selected_m, "mentee_name": mentee_name, "mentee_position": mentee_pos, "mentee_team": mentee_team, "mentee_email": mentee_email, "date": sel_date, "start_time": slots[0]['start'], "end_time": slots[0]['end'], "topic": topic, "location": slots[0].get('location',''), "status": "대기중"}
                 st.session_state.reservations.append(new_res); safe_save(ws_res, st.session_state.reservations); st.balloons(); st.rerun()
 
-# --- [이후 탭 2, 3, 4 로직은 동일하게 유지됩니다] ---
+# --- [💼 탭 2: 멘토 일정 관리] ---
 with tab2:
     st.subheader("💼 내 일정 관리")
     m_login_t2 = st.selectbox("본인 성함 선택", mentor_names, key="m_login_t2")
     if m_login_t2 != "선택해주세요":
-        m_info_t2 = next((m for m in st.session_state.mentors_data if m['name']==m_login_t2), None)
-        if m_info_t2 and st.text_input("비밀번호", type="password", key="m_pw_t2_input") == str(m_info_t2['pw']):
+        m_info = next((m for m in st.session_state.mentors_data if m['name']==m_login_t2), None)
+        if m_info and st.text_input("비밀번호", type="password", key="m_pw_t2") == str(m_info['pw']):
             c1, c2, c3, c4 = st.columns(4)
-            d_v, s_v, e_v, l_v = c1.date_input("날짜", key="slot_d"), c2.time_input("시작", key="slot_s"), c3.time_input("종료", key="slot_e"), c4.text_input("장소", key="slot_l")
-            if st.button("일정 등록", key="slot_submit"):
+            d_v, s_v, e_v, l_v = c1.date_input("날짜", key="slot_d_t2"), c2.time_input("시작", key="slot_s_t2"), c3.time_input("종료", key="slot_e_t2"), c4.text_input("장소", key="slot_l_t2")
+            if st.button("일정 등록", key="btn_t2"):
                 st.session_state.available_slots.append({"mentor": m_login_t2, "date": d_v, "start": s_v, "end": e_v, "location": l_v})
                 safe_save(ws_slots, st.session_state.available_slots); st.rerun()
+
+# --- [📋 탭 3: 예약 관리] ---
 with tab3:
-    st.subheader("📋 예약 현황 관리")
+    st.subheader("📋 멘티 신청 현황")
     m_sel_t3 = st.selectbox("본인 성함 선택", mentor_names, key="m_sel_t3")
     if m_sel_t3 != "선택해주세요":
-        m_info_t3 = next((m for m in st.session_state.mentors_data if m['name']==m_sel_t3), None)
-        if m_info_t3 and st.text_input("비번 확인", type="password", key="m_pw_t3_input") == str(m_info_t3['pw']):
+        m_info = next((m for m in st.session_state.mentors_data if m['name']==m_sel_t3), None)
+        if m_info and st.text_input("비번 확인", type="password", key="m_pw_t3") == str(m_info['pw']):
             for r in [res for res in st.session_state.reservations if res['mentor']==m_sel_t3]:
                 with st.expander(f"[{r['status']}] {r['date']} | {r['mentee_name']}님"):
                     st.write(f"주제: {r['topic']}")
                     if r['status'] == "대기중":
-                        if st.button("✅ 승인", key=f"ok_res_{r['id']}"):
+                        if st.button("✅ 승인", key=f"ok_{r['id']}"):
                             r['status']="승인됨"; safe_save(ws_res, st.session_state.reservations); st.rerun()
+
+# --- [👑 탭 4: 관리자 메뉴] ---
 with tab4:
-    st.subheader("👑 관리자 메뉴")
+    st.subheader("👑 인사총무팀 전용 관리 시스템")
     if not st.session_state.admin_logged_in:
-        a_id, a_pw = st.text_input("ID", key="ad_id"), st.text_input("PW", type="password", key="ad_pw")
-        if st.button("로그인", key="ad_lbtn"):
+        a_id, a_pw = st.text_input("Admin ID", key="ad_id"), st.text_input("Admin PW", type="password", key="ad_pw")
+        if st.button("로그인", key="ad_btn"):
             if a_id == st.session_state.admin_info['id'] and a_pw == str(st.session_state.admin_info['pw']):
                 st.session_state.admin_logged_in = True; st.rerun()
     else:
-        if st.button("로그아웃", key="ad_obtn"): st.session_state.admin_logged_in = False; st.rerun()
+        if st.button("관리자 로그아웃", key="ad_out"): st.session_state.admin_logged_in = False; st.rerun()
         with st.expander("👨‍🏫 멘토 신규 등록"):
             nc1, nc2, nc3, nc4 = st.columns(4)
-            n_m, n_p, n_t, n_pw = nc1.text_input("성함", key="nm"), nc2.text_input("직급", key="np"), nc3.text_input("팀명", key="nt"), nc4.text_input("비번", key="npw")
-            n_em, n_e = st.text_input("이메일", key="ne"), st.text_input("전문분야", key="nx")
-            n_g = st.text_area("인사말", key="ng")
-            if st.button("등록하기", key="nbtn"):
+            n_m, n_p, n_t, n_pw = nc1.text_input("성함", key="n_m"), nc2.text_input("직급", key="n_p"), nc3.text_input("팀명", key="n_t"), nc4.text_input("비번", key="n_pw")
+            nc5, nc6 = st.columns([1.5, 2.5])
+            n_em, n_e = nc5.text_input("이메일", key="n_em"), nc6.text_input("전문분야", key="n_e")
+            n_g = st.text_area("인사말", key="n_g")
+            if st.button("멘토 등록하기", key="n_btn"):
                 st.session_state.mentors_data.append({"name":n_m, "position":n_p, "team":n_t, "pw":n_pw, "expertise":n_e, "greeting":n_g, "email":n_em})
                 safe_save(ws_mentors, st.session_state.mentors_data); st.rerun()
+        
         with st.expander("📋 멘토 수정/삭제", expanded=True):
             for i, m in enumerate(st.session_state.mentors_data):
-                st.write(f"**{m['name']}**")
-                c1, c2, c3, c4 = st.columns(4)
-                un, up, ut, upw = c1.text_input("성함", m['name'], key=f"un_{i}"), c2.text_input("직급", m.get('position',''), key=f"up_{i}"), c3.text_input("팀명", m.get('team',''), key=f"ut_{i}"), c4.text_input("비번", m.get('pw',''), key=f"upw_{i}")
-                ue, uex, ug = st.text_input("이메일", m.get('email',''), key=f"ue_{i}"), st.text_input("전문분야", m.get('expertise',''), key=f"ux_{i}"), st.text_area("인사말", m.get('greeting',''), key=f"ug_{i}")
+                st.write(f"**{m['name']} 멘토**")
+                er1_1, er1_2, er1_3, er1_4 = st.columns(4)
+                un, up, ut, upw = er1_1.text_input("성함", m['name'], key=f"un_{i}"), er1_2.text_input("직급", m.get('position',''), key=f"up_{i}"), er1_3.text_input("팀명", m.get('team',''), key=f"ut_{i}"), er1_4.text_input("비번", m.get('pw',''), key=f"upw_{i}")
+                er2_1, er2_2 = st.columns([1.5, 2.5])
+                ue, ux = er2_1.text_input("이메일", m.get('email',''), key=f"ue_{i}"), er2_2.text_input("전문분야", m.get('expertise',''), key=f"ux_{i}")
+                ug = st.text_area("인사말", m.get('greeting',''), key=f"ug_{i}")
                 if st.button("💾 저장", key=f"sv_{i}"):
-                    st.session_state.mentors_data[i].update({"name":un, "position":up, "team":ut, "pw":upw, "email":ue, "expertise":uex, "greeting":ug})
+                    st.session_state.mentors_data[i].update({"name":un, "position":up, "team":ut, "pw":upw, "email":ue, "expertise":ux, "greeting":ug})
                     safe_save(ws_mentors, st.session_state.mentors_data); st.rerun()
                 if st.button("❌ 삭제", key=f"dl_{i}"):
                     st.session_state.mentors_data.pop(i); safe_save(ws_mentors, st.session_state.mentors_data); st.rerun()
+                st.divider()
