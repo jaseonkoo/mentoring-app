@@ -293,7 +293,7 @@ with tab4:
                 st.session_state.admin_info['pw'] = nad_pw; safe_save("admin", [st.session_state.admin_info]); st.success("완료")
         with st.expander("👨‍🏫 멘토 신규 등록"):
             r1, r2, r3, r4 = st.columns(4); nm, np, nt, n_pw = r1.text_input("성함",key="n1"), r2.text_input("직급",key="n2"), r3.text_input("팀명",key="n3"), r4.text_input("비번",key="n4")
-            e1, e2 = st.columns([1.5, 2.5]); ne, nx = e1.text_input("이메일",key="n5"), e2.text_input("전문",key="n6"); ng = st.text_area("인사말", key="n7")
+            e1, e2 = st.columns([1.5, 2.5]); ne, nx = e1.text_input("이메일",key="n5"), e2.text_input("전문분야",key="n6"); ng = st.text_area("인사말", key="n7")
             if st.button("등록하기") and is_company_email(ne):
                 st.session_state.mentors_data.append({"name":nm, "position":np, "team":nt, "pw":n_pw, "expertise":nx, "greeting":ng, "email":ne})
                 safe_save("mentors", st.session_state.mentors_data); st.rerun()
