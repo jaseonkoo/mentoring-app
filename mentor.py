@@ -18,21 +18,19 @@ SYSTEM_URL = "https://share.streamlit.io/jaseonkoo/mentoring-app/main/mentor.py"
 if "admin_logged_in" not in st.session_state:
     st.session_state.admin_logged_in = False
 
-# [3] 📱 모바일 제목 노출 및 겹침 방지 안정화 CSS
+# [3] 📱 모바일 최적화 및 겹침 방지 CSS
 style_css = """
     <style>
     .stTextInput, .stSelectbox, .stDateInput, .stTextArea, .stTimeInput {
         margin-bottom: 15px !important;
     }
     @media (max-width: 768px) {
-        /* 익스팬더 제목 강제 노출 */
         div[data-testid="stExpander"] details summary p {
             display: block !important;
             visibility: visible !important;
             line-height: 1.6 !important;
             font-size: 15px !important;
         }
-        /* 시스템 잔상(_arr 등) 투명 처리 */
         div[data-testid="stExpander"] details summary span:not(:has(p)) {
             font-size: 0 !important;
             color: transparent !important;
@@ -100,16 +98,26 @@ if "data_loaded" not in st.session_state:
     load_data(); st.session_state.data_loaded = True
 
 def send_email(to_email, subject, body):
-    SMTP_SERVER, SMTP_PORT = "smtp.dooray.com", 465
-    SMTP_USER, SMTP_PW = st.secrets["email"]["smtp_user"], st.secrets["email"]["smtp_password"]
+    SMTP_S, SMTP_P = "smtp.dooray.com", 465
+    U, P = st.secrets["email"]["smtp_user"], st.secrets["email"]["smtp_password"]
     try:
         msg = MIMEText(body, 'plain', 'utf-8')
-        msg['Subject'], msg['From'], msg['To'] = Header(subject, 'utf-8'), SMTP_USER, to_email
-        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
-            server.login(SMTP_USER, SMTP_PW)
-            server.sendmail(SMTP_USER, to_email, msg.as_string())
+        msg['Subject'], msg['From'], msg['To'] = Header(subject, 'utf-8'), U, to_email
+        with smtplib.SMTP_SSL(SMTP_S, SMTP_P) as server:
+            server.login(U, P)
+            server.sendmail(U, to_email, msg.as_string())
         st.toast(f"✅ 알림 메일 발송 완료")
     except: pass
+
+# 💡 [도우미 함수] 특정 시간 사이의 30분 단위 리스트 생성
+def generate_time_slots(start_time, end_time):
+    slots = []
+    curr = datetime.datetime.combine(datetime.date.today(), start_time)
+    end = datetime.datetime.combine(datetime.date.today(), end_time)
+    while curr <= end:
+        slots.append(curr.time())
+        curr += datetime.timedelta(minutes=30)
+    return slots
 
 mentor_names = ["선택해주세요"] + [m['name'] for m in st.session_state.mentors_data]
 
@@ -134,15 +142,14 @@ with tab1:
                 st.success(f"✅ **{m}** : {', '.join(sorted(list(infos)))}")
 
     st.markdown("---")
-    c1_1, c1_2 = st.columns(2)
-    with c1_1:
+    c1, c2 = st.columns(2)
+    with c1:
         mentee_name = st.text_input("신청자 성함", key="m_name_t1")
         mentee_pos = st.text_input("신청자 직급", key="m_pos_t1")
-    with c1_2:
+    with c2:
         mentee_team = st.text_input("신청자 팀명", key="m_team_t1")
         mentee_email = st.text_input("사내 이메일", key="m_email_t1")
 
-    # 멘토 선택 및 프로필 노출 영역
     col_sel, col_prof = st.columns([1.2, 1])
     
     with col_sel:
@@ -151,20 +158,35 @@ with tab1:
         
         slots = [s for s in st.session_state.available_slots if s['mentor']==selected_m and s['date']==sel_date]
         if slots:
-            st.info(f"📍 {slots[0].get('location','-')} | ⏰ {slots[0]['start']} ~ {slots[0]['end']}")
-            t_start = st.time_input("희망 시작 시간", slots[0]['start'], key="t_s_t1")
-            t_end = st.time_input("희망 종료 시간", slots[0]['end'], key="t_e_t1")
+            st.info(f"📍 {slots[0].get('location','-')} | ⏰ 가능 시간: {slots[0]['start']} ~ {slots[0]['end']}")
+            
+            # ✨ [기능 추가] 멘토가 정한 범위 내에서만 선택 가능한 30분 단위 시간 목록
+            possible_times = generate_time_slots(slots[0]['start'], slots[0]['end'])
+            
+            ct1, ct2 = st.columns(2)
+            # 시작 시간 선택
+            t_start = ct1.selectbox("희망 시작 시간", possible_times, format_func=lambda x: x.strftime("%H:%M"), key="t_s_t1")
+            # 종료 시간은 시작 시간 이후부터만 나오게 필터링
+            possible_ends = [t for t in possible_times if t > t_start]
+            if not possible_ends: possible_ends = [t_start]
+            t_end = ct2.selectbox("희망 종료 시간", possible_ends, format_func=lambda x: x.strftime("%H:%M"), key="t_e_t1")
+            
             topic = st.text_area("상담 주제 (필수)", key="topic_t1")
             if st.button("🚀 예약 신청하기", type="primary", use_container_width=True, key="btn_t1"):
                 if not mentee_name or not topic: st.error("성함과 주제를 입력해주세요.")
                 else:
                     new_res = {"id": str(uuid.uuid4()), "mentor": selected_m, "mentee_name": mentee_name, "mentee_position": mentee_pos, "mentee_team": mentee_team, "mentee_email": mentee_email, "date": sel_date, "start_time": t_start, "end_time": t_end, "topic": topic, "location": slots[0].get('location',''), "status": "대기중"}
-                    st.session_state.reservations.append(new_res); safe_save(ws_res, st.session_state.reservations); st.balloons(); st.rerun()
+                    st.session_state.reservations.append(new_res); safe_save(ws_res, st.session_state.reservations)
+                    
+                    # 멘토에게 알림 발송
+                    m_info = next((m for m in st.session_state.mentors_data if m['name']==selected_m), None)
+                    if m_info and m_info.get('email'):
+                        send_email(m_info['email'], "[DaeHanFeed] 새로운 멘토링 신청", f"{mentee_name}님이 {sel_date} {t_start}에 신청하셨습니다.")
+                    st.balloons(); st.success("신청 완료!"); st.rerun()
         elif selected_m != "선택해주세요":
             st.warning("선택하신 날짜에 일정이 없습니다.")
 
     with col_prof:
-        # ✨ [복구 완료] 선택한 멘토의 상세 프로필 카드
         if selected_m != "선택해주세요":
             p = next((m for m in st.session_state.mentors_data if m['name'] == selected_m), None)
             if p:
@@ -179,11 +201,11 @@ with tab1:
                         </div>
                     </div>
                 """, unsafe_allow_html=True)
-        else: st.info("멘토를 선택하시면 이곳에 프로필이 나타납니다.")
+        else: st.info("멘토를 선택하시면 프로필이 나타납니다.")
 
-# --- [💼 탭 2: 멘토 일정 관리] ---
+# --- [💼 탭 2/3: 멘토 관리 로직 유지] ---
 with tab2:
-    st.subheader("💼 나의 일정 관리")
+    st.subheader("💼 나의 멘토링 일정 관리")
     m_log2 = st.selectbox("본인 성함 선택", mentor_names, key="m_log_t2")
     if m_log2 != "선택해주세요":
         minfo = next((m for m in st.session_state.mentors_data if m['name']==m_log2), None)
@@ -194,7 +216,6 @@ with tab2:
                 st.session_state.available_slots.append({"mentor": m_log2, "date": dv, "start": sv, "end": ev, "location": lv})
                 safe_save(ws_slots, st.session_state.available_slots); st.rerun()
 
-# --- [📋 탭 3: 멘토 예약 관리] ---
 with tab3:
     st.subheader("📋 신청 현황 관리")
     m_sel3 = st.selectbox("성함 선택", mentor_names, key="m_sel_t3")
