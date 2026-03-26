@@ -19,7 +19,7 @@ SYSTEM_URL = "https://share.streamlit.io/jaseonkoo/mentoring-app/main/mentor.py"
 if "admin_logged_in" not in st.session_state:
     st.session_state.admin_logged_in = False
 
-# ✨ [기능 추가 3] 멘토 이름 변경 시 비번 입력창 초기화 콜백 함수
+# ✨ 멘토 이름 변경 시 비번 입력창 초기화 콜백
 def reset_pw_t2():
     if "m_pw_t2" in st.session_state: st.session_state["m_pw_t2"] = ""
 def reset_pw_t3():
@@ -158,7 +158,7 @@ with tab1:
         if slots:
             st.info(f"📍 {slots[0].get('location','-')} | ⏰ {slots[0]['start']} ~ {slots[0]['end']}")
             p_t = generate_time_slots(slots[0]['start'], slots[0]['end'])
-            ct1, ct2 = st.columns(2); ts = ct1.selectbox("시작", p_t, format_func=lambda x: x.strftime("%H:%M"), key="ts_t1"); te = ct2.selectbox("종료", [t for t in p_t if t > ts] if [t for t in p_t if t > ts] else [ts], format_func=lambda x: x.strftime("%H:%M"), key="te_t1")
+            ct1, ct2 = st.columns(2); ts = ct1.selectbox("시작 시간", p_t, format_func=lambda x: x.strftime("%H:%M"), key="ts_t1"); te = ct2.selectbox("종료 시간", [t for t in p_t if t > ts] if [t for t in p_t if t > ts] else [ts], format_func=lambda x: x.strftime("%H:%M"), key="te_t1")
             topic = st.text_area("상담 주제 (필수)", key="tp_t1")
             if st.button("🚀 예약 신청하기", type="primary", use_container_width=True, key="bt1"):
                 if not m_name or not topic or not is_company_email(m_email): st.warning("⚠️ 입력 정보를 확인해 주세요.")
@@ -168,7 +168,9 @@ with tab1:
                         st.session_state.reservations.append(new_res); safe_save(ws_res, st.session_state.reservations)
                         m_info = next((m for m in st.session_state.mentors_data if m['name']==selected_m), None)
                         if m_info and m_info.get('email'):
-                            send_email(m_info['email'], "[DaeHanFeed] 새로운 멘토링 신청", f"안녕하세요 {selected_m} 멘토님!\n\n{m_name}님께서 멘토링을 신청하셨습니다.\n- 일시: {sel_date} ({ts} ~ {te})\n- 주제: {topic}\n\n시스템 접속: {SYSTEM_URL}")
+                            mail_subject = f"[DaeHanFeed 멘토링] 새로운 신청 접수"
+                            mail_body = f"안녕하세요 {selected_m} 멘토님!\n\n{m_name}님께서 멘토링을 신청하셨습니다.\n- 일시: {sel_date} ({ts} ~ {te})\n- 주제: {topic}\n\n시스템: {SYSTEM_URL}"
+                            send_email(m_info['email'], mail_subject, mail_body)
                         time.sleep(1); status.update(label="✅ 신청 완료!", state="complete", expanded=False)
                     st.balloons(); st.success("🎉 신청 완료!"); time.sleep(1.5); st.rerun()
 
@@ -177,16 +179,13 @@ with tab1:
             p = next((m for m in st.session_state.mentors_data if m['name'] == selected_m), None)
             if p: st.markdown(f"""<div style="border: 2px solid #4A90E2; padding: 25px; border-radius: 12px; background-color: #f0f7ff;"><h3 style="margin-top:0; color: #1E3A8A;">🎖️ {p['name']} {p.get('position','')} 멘토</h3><p>🏢 소속: {p.get('team','')}<br>🎯 전문분야: {p.get('expertise','')}</p><div style="margin-top: 15px; background-color: white; padding: 15px; border-radius: 8px; border-left: 5px solid #4A90E2;"><p style="font-size: 0.9em;"><i>"{p.get('greeting','')}"</i></p></div></div>""", unsafe_allow_html=True)
 
-# --- [💼 탭 2: 멘토 일정 관리 및 암호 변경] ---
+# --- [💼 탭 2: 멘토 일정 관리 (기본 시간 00:00 수정)] ---
 with tab2:
     st.subheader("💼 나의 멘토링 일정 및 계정 관리")
-    # ✨ [기능 추가 3] on_change 콜백으로 이름 변경 시 비번 초기화
     m_log2 = st.selectbox("본인 성함 선택", mentor_names, key="m_log_t2", on_change=reset_pw_t2)
     if m_log2 != "선택해주세요":
         minfo = next((m for m in st.session_state.mentors_data if m['name']==m_log2), None)
         if minfo and st.text_input("비밀번호 입력", type="password", key="m_pw_t2") == str(minfo['pw']):
-            
-            # ✨ [기능 추가 2] 멘토 암호 변경
             with st.expander("🔑 내 비밀번호 변경하기"):
                 new_m_pw = st.text_input("새로운 비밀번호", type="password", key="m_new_pw_f")
                 if st.button("비밀번호 업데이트", key="m_pw_btn"):
@@ -198,7 +197,11 @@ with tab2:
             
             st.divider()
             c2_1, c2_2, c2_3, c2_4 = st.columns(4)
-            dv, sv, ev, lv = c2_1.date_input("날짜", key="sd_t2"), c2_2.time_input("시작", key="ss_t2"), c2_3.time_input("종료", key="se_t2"), c2_4.text_input("상담 장소", key="sl_t2")
+            # ✨ [수정사항 2] 기본 셋팅 시간을 00:00으로 변경
+            dv = c2_1.date_input("날짜", key="sd_t2")
+            sv = c2_2.time_input("시작 시간", datetime.time(0,0), key="ss_t2")
+            ev = c2_3.time_input("종료 시간", datetime.time(0,0), key="se_t2")
+            lv = c2_4.text_input("상담 장소", key="sl_t2")
             if st.button("🗓️ 일정 등록하기", type="primary", use_container_width=True, key="sb_t2"):
                 with st.status("📡 등록 중...", expanded=True) as status:
                     st.session_state.available_slots.append({"mentor": m_log2, "date": dv, "start": sv, "end": ev, "location": lv})
@@ -208,7 +211,6 @@ with tab2:
 # --- [📋 탭 3: 멘토 예약 관리] ---
 with tab3:
     st.subheader("📋 멘티 신청 현황 관리")
-    # ✨ [기능 추가 3] 이름 변경 시 비번 초기화 적용
     m_sel3 = st.selectbox("본인 성함 선택", mentor_names, key="m_sel_t3", on_change=reset_pw_t3)
     if m_sel3 != "선택해주세요":
         minfo3 = next((m for m in st.session_state.mentors_data if m['name']==m_sel3), None)
@@ -223,7 +225,7 @@ with tab3:
                         if b2.button("❌ 거절", key=f"no_{r['id']}", use_container_width=True):
                             r['status']="거절됨"; safe_save(ws_res, st.session_state.reservations); st.rerun()
 
-# --- [👑 탭 4: 관리자 메뉴 & 1. 관리자 암호 변경 & 3. 멘토 비번 리셋] ---
+# --- [👑 탭 4: 관리자 메뉴 (비번 리셋 버튼 제거)] ---
 with tab4:
     st.subheader("👑 인사총무팀 전용 관리 시스템")
     if not st.session_state.admin_logged_in:
@@ -233,21 +235,18 @@ with tab4:
                 st.session_state.admin_logged_in = True; st.rerun()
     else:
         if st.button("관리자 로그아웃"): st.session_state.admin_logged_in = False; st.rerun()
-        
-        # ✨ [기능 추가 1] 관리자 암호 변경
         with st.expander("🔐 관리자 비밀번호 변경"):
             new_ad_pw = st.text_input("새 관리자 비밀번호", type="password", key="new_ad_pw_f")
             if st.button("관리자 비번 업데이트"):
                 if new_ad_pw:
                     st.session_state.admin_info['pw'] = new_ad_pw
-                    safe_save(ws_admin, [st.session_state.admin_info])
-                    st.success("✅ 관리자 비밀번호가 변경되었습니다.")
-                else: st.error("새 비밀번호를 입력해 주세요.")
+                    safe_save(ws_admin, [st.session_state.admin_info]); st.success("✅ 변경 완료")
+                else: st.error("입력 필수")
 
         with st.expander("👨‍🏫 멘토 신규 등록"):
             r1, r2, r3, r4 = st.columns(4)
             nm, np, nt, n_pw = r1.text_input("성함",key="n1"), r2.text_input("직급",key="n2"), r3.text_input("팀명",key="n3"), r4.text_input("비번",key="n4")
-            e1, e2 = st.columns([1.5, 2.5]); ne, nx = e1.text_input("이메일",key="n5"), e2.text_input("전문분야",key="n6"); ng = st.text_area("인사말", key="n7")
+            e1, e2 = st.columns([1.5, 2.5]); ne, nx = e1.text_input("이메일",key="n5"), e2.text_input("전문",key="n6"); ng = st.text_area("인사말", key="n7")
             if st.button("등록하기"):
                 if is_company_email(ne):
                     st.session_state.mentors_data.append({"name":nm, "position":np, "team":nt, "pw":n_pw, "expertise":nx, "greeting":ng, "email":ne})
@@ -256,15 +255,9 @@ with tab4:
         with st.expander("📋 멘토 수정/삭제", expanded=True):
             for i, m in enumerate(st.session_state.mentors_data):
                 st.markdown(f"**[{m['name']}] 정보 관리**")
+                # ✨ [수정사항 1] 멘토 비밀번호 리셋 버튼 제거됨
                 er1, er2, er3, er4 = st.columns(4)
-                un, up, ut, upw = er1.text_input("성함", m['name'], key=f"un_{i}"), er2.text_input("직급", m.get('position',''), key=f"up_{i}"), er3.text_input("팀", m.get('team',''), key=f"ut_{i}"), er4.text_input("비번", m.get('pw',''), key=f"upw_{i}")
-                
-                # ✨ [기능 추가 3] 관리자 메뉴에서 비번 리셋 (예: '1234'로 리셋)
-                if st.button(f"🔄 {m['name']} 비번 리셋 (1234)", key=f"rs_{i}"):
-                    st.session_state.mentors_data[i]['pw'] = "1234"
-                    safe_save(ws_mentors, st.session_state.mentors_data)
-                    st.success(f"{m['name']} 멘토 비밀번호가 '1234'로 초기화되었습니다."); time.sleep(1); st.rerun()
-
+                un, up, ut, upw = er1.text_input("이름", m['name'], key=f"un_{i}"), er2.text_input("직급", m.get('position',''), key=f"up_{i}"), er3.text_input("팀", m.get('team',''), key=f"ut_{i}"), er4.text_input("비번", m.get('pw',''), key=f"upw_{i}")
                 e1, e2 = st.columns([1.5, 2.5]); ue, ux = e1.text_input("메일", m.get('email',''), key=f"ue_{i}"), e2.text_input("전문분야", m.get('expertise',''), key=f"ux_{i}"); ug = st.text_area("인사말", m.get('greeting',''), key=f"ug_{i}")
                 if st.button("💾 저장", key=f"sv_{i}"):
                     if is_company_email(ue):
