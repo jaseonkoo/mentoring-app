@@ -302,7 +302,7 @@ with tab4:
             for i, m in enumerate(st.session_state.get('mentors_data', [])):
                 st.markdown(f"**[{m['name']}] 관리**")
                 er1, er2, er3, er4 = st.columns(4); un, up, ut, upw = er1.text_input("성함", m['name'], key=f"un_{i}"), er2.text_input("직급", m.get('position',''), key=f"up_{i}"), er3.text_input("팀명", m.get('team',''), key=f"ut_{i}"), er4.text_input("비번", m.get('pw',''), key=f"upw_{i}")
-                e1, e2 = st.columns([1.5, 2.5]); ue, ux = e1.text_input("메일", m.get('email',''), key=f"ue_{i}"), e2.text_input("전문분야", m.get('expertise',''), key=f"ux_{i}"); ug = st.text_area("인사말", m.get('greeting',''), key=f"ug_{i}")
+                e1, e2 = st.columns([1.5, 2.5]); ue, ux = e1.text_input("이메일", m.get('email',''), key=f"ue_{i}"), e2.text_input("전문분야", m.get('expertise',''), key=f"ux_{i}"); ug = st.text_area("인사말", m.get('greeting',''), key=f"ug_{i}")
                 if st.button("💾 저장", key=f"sv_{i}"):
                     if is_company_email(ue):
                         st.session_state.mentors_data[i].update({"name":un,"position":up,"team":ut,"pw":upw,"email":ue,"expertise":ux,"greeting":ug})
