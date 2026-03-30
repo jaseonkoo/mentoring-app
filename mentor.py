@@ -9,23 +9,25 @@ from email.header import Header
 from oauth2client.service_account import ServiceAccountCredentials
 import time
 
-# [1] 기본 설정 및 차장님 절대 규칙 (상수화)
+# [1] 브라우저 및 페이지 기본 설정
 st.set_page_config(page_title="DaeHanFeed Mentoring", page_icon="🤝", layout="wide")
+
+# [차장님 절대 규칙] 시스템 환경 설정
 SYSTEM_URL = "https://share.streamlit.io/jaseonkoo/mentoring-app/main/mentor.py"
 ALLOWED_DOMAIN = "@daehanfeed.co.kr"
 WEEKS = ['월', '화', '수', '목', '금', '토', '일']
 
-# [2] 세션 상태 초기화 (방문자 체크 포함)
+# [2] 세션 상태 초기화
 if "admin_logged_in" not in st.session_state: st.session_state.admin_logged_in = False
 if "visited" not in st.session_state: st.session_state.visited = False
 
-# 콜백 함수 (멘토 변경 시 비번 초기화)
+# 콜백 함수
 def reset_pw_t2():
     if "m_pw_t2" in st.session_state: st.session_state["m_pw_t2"] = ""
 def reset_pw_t3():
     if "m_pw_t3" in st.session_state: st.session_state["m_pw_t3"] = ""
 
-# [3] CSS 스타일 (모바일 최적화 및 .status-item 복구)
+# [3] CSS 스타일 (가독성 스타일 복구 완료)
 st.markdown("""
     <style>
     .stTextInput, .stSelectbox, .stDateInput, .stTextArea, .stTimeInput { margin-bottom: 12px !important; }
@@ -45,27 +47,32 @@ st.caption("대한사료 임직원 간의 성장을 돕는 실시간 소통 플�
 st.markdown("---")
 
 # ==========================================
-# ☁️ 구글 스프레드시트 연동 및 변수 초기화
+# ☁️ 구글 스프레드시트 연동 (안전한 캐싱 구조)
 # ==========================================
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets",
-         "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
-
 @st.cache_resource
-def init_gspread():
+def get_gspread_client():
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets",
+             "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
-    client = gspread.authorize(creds)
+    return gspread.authorize(creds)
+
+def get_mentoring_db():
+    client = get_gspread_client()
     doc = client.open("멘토링예약DB")
-    if "stats" not in [w.title for w in doc.worksheets()]:
+    # 필수 시트 확인 및 생성
+    titles = [w.title for w in doc.worksheets()]
+    if "stats" not in titles:
         ws_s = doc.add_worksheet("stats", 10, 2); ws_s.update([["visitor_count"], [0]])
     return doc
 
-doc = init_gspread()
-ws_slots = doc.worksheet("slots"); ws_res = doc.worksheet("reservations")
-ws_mentors = doc.worksheet("mentors"); ws_admin = doc.worksheet("admin"); ws_stats = doc.worksheet("stats")
+# 전역에서 사용하는 시트 객체들 (함수 내에서 호출하여 API 에러 방지)
+def get_ws(name):
+    doc = get_mentoring_db()
+    return doc.worksheet(name)
 
 @st.cache_data(ttl=60)
 def get_sheet_data(sheet_name):
-    try: return doc.worksheet(sheet_name).get_all_records()
+    try: return get_ws(sheet_name).get_all_records()
     except: return []
 
 def fetch_latest_data(force=False):
@@ -95,41 +102,46 @@ def fetch_latest_data(force=False):
             formatted_res.append(r)
         st.session_state.reservations = formatted_res
         
-        counts = ws_stats.get_all_values()
+        counts = get_ws("stats").get_all_values()
         st.session_state.visitor_count = int(counts[1][0])
     except: pass
 
+# 방문자 카운트
 if not st.session_state.visited:
-    fetch_latest_data(); new_count = st.session_state.visitor_count + 1
-    ws_stats.update_cell(2, 1, new_count); st.session_state.visited = True; st.session_state.visitor_count = new_count
+    fetch_latest_data()
+    new_count = st.session_state.visitor_count + 1
+    get_ws("stats").update_cell(2, 1, new_count)
+    st.session_state.visited = True; st.session_state.visitor_count = new_count
 
 fetch_latest_data()
 
 def safe_save(ws_name, data_list):
     try:
-        ws = doc.worksheet(ws_name); ws.clear()
+        ws = get_ws(ws_name); ws.clear()
         if data_list:
             df = pd.DataFrame(data_list)
             for c in ['date', 'start', 'end', 'start_time', 'end_time']:
                 if c in df.columns: df[c] = df[c].astype(str)
             df = df.fillna(""); ws.update([df.columns.values.tolist()] + df.values.tolist())
         fetch_latest_data(force=True)
-    except: st.error("데이터 저장 오류")
+    except: st.error("데이터 저장 오류가 발생했습니다.")
 
 def send_email(to_email, subject, body):
     SMTP_S, SMTP_P = "smtp.dooray.com", 465
     U, P = st.secrets["email"]["smtp_user"], st.secrets["email"]["smtp_password"]
     try:
-        msg = MIMEText(body, 'plain', 'utf-8'); msg['Subject'], msg['From'], msg['To'] = Header(subject, 'utf-8'), Header(U), to_email
-        with smtplib.SMTP_SSL(SMTP_S, SMTP_P) as server: server.login(U, P); server.sendmail(U, to_email, msg.as_string())
-    except: pass
+        msg = MIMEText(body, 'plain', 'utf-8'); msg['Subject'] = Header(subject, 'utf-8')
+        msg['From'] = Header(U); msg['To'] = to_email
+        with smtplib.SMTP_SSL(SMTP_S, SMTP_P) as server:
+            server.login(U, P); server.sendmail(U, to_email, msg.as_string())
+    except Exception as e: st.error(f"메일 발송 실패: {e}")
 
 def is_company_email(email): return email.strip().lower().endswith(ALLOWED_DOMAIN)
 
 mentor_names = ["선택해주세요"] + [m['name'] for m in st.session_state.get('mentors_data', [])]
 
 # ==========================================
-# 📊 탭 구성 (Tab 1 ~ 4)
+# 📊 탭 구성 (Tab 1 ~ Tab 4)
 # ==========================================
 tab1, tab2, tab3, tab4 = st.tabs(["🙋‍♂️ 멘티 예약 신청", "💼 멘토 일정 관리", "📋 멘토 예약 관리", "👑 관리자 메뉴"])
 
@@ -176,12 +188,13 @@ with tab1:
                         st.session_state.reservations.append(new_res); safe_save("reservations", st.session_state.reservations)
                         slot_to_del = next((s for s in st.session_state.available_slots if s['mentor'] == selected_m and s['date'] == sel_date), None)
                         if slot_to_del: st.session_state.available_slots.remove(slot_to_del); safe_save("slots", st.session_state.available_slots)
+                        
                         m_info = next((m for m in st.session_state.mentors_data if m['name']==selected_m), None)
                         if m_info and m_info.get('email'):
-                            body = (f"안녕하세요, {selected_m} 멘토님!\n\n{m_n}님께서 멘토링을 신청하셨습니다.\n\n"
-                                    f"- 일시: {sel_date} ({ts.strftime('%H:%M')} ~ {te.strftime('%H:%M')})\n"
-                                    f"- 주제: {topic}\n\n시스템 접속: {SYSTEM_URL}\n\n감사합니다.")
-                            send_email(m_info['email'], f"[대한사료 멘토링] 새로운 멘토링 신청 접수", body)
+                            mail_body = (f"안녕하세요, {selected_m} 멘토님!\n\n{m_n}님께서 멘토링을 신청하셨습니다.\n\n"
+                                        f"- 일시: {sel_date} ({ts.strftime('%H:%M')} ~ {te.strftime('%H:%M')})\n"
+                                        f"- 주제: {topic}\n\n시스템 접속: {SYSTEM_URL}\n\n감사합니다.")
+                            send_email(m_info['email'], f"[대한사료 멘토링] 새로운 멘토링 신청 접수", mail_body)
                     st.balloons(); time.sleep(1); st.rerun()
 
     with col_prof:
@@ -189,7 +202,7 @@ with tab1:
             p = next((m for m in st.session_state.get('mentors_data', []) if m['name'] == selected_m), None)
             if p: st.markdown(f"""<div style="border: 2px solid #4A90E2; padding: 25px; border-radius: 12px; background-color: #f0f7ff;"><h3 style="margin-top:0; color: #1E3A8A;">🎖️ {p['name']} {p.get('position','')} 멘토</h3><p>🏢 소속: {p.get('team','')}<br>🎯 전문분야: {p.get('expertise','')}</p><div style="margin-top: 15px; background-color: white; padding: 15px; border-radius: 8px; border-left: 5px solid #4A90E2;"><p style="font-size: 0.9em;"><i>"{p.get('greeting','')}"</i></p></div></div>""", unsafe_allow_html=True)
 
-# --- [Tab 2: 멘토 일정 관리 (중복 등록 방지 로직 포함)] ---
+# --- [Tab 2: 멘토 일정 관리] ---
 with tab2:
     st.subheader("💼 나의 멘토링 일정 관리")
     m_log2 = st.selectbox("본인 성함 선택", mentor_names, key="m_log_t2", on_change=reset_pw_t2)
@@ -210,7 +223,7 @@ with tab2:
                 col_a, col_b = st.columns([4, 1]); w_s = WEEKS[s['date'].weekday()]; col_a.write(f"📅 {s['date']}({w_s}) | ⏰ {s['start']}~{s['end']} | 📍 {s.get('location','-')}")
                 if col_b.button("삭제", key=f"del_s_{i}"): st.session_state.available_slots.remove(s); safe_save("slots", st.session_state.available_slots); st.rerun()
 
-# --- [Tab 3: 멘토 예약 관리 (승인/거절 및 메일 발송 로직 완벽 복구)] ---
+# --- [Tab 3: 멘토 예약 관리 (승인/거절 로직 복구)] ---
 with tab3:
     st.subheader("📋 멘티 신청 현황 관리")
     m_sel3 = st.selectbox("본인 성함 선택", mentor_names, key="m_sel_t3", on_change=reset_pw_t3)
@@ -220,9 +233,9 @@ with tab3:
             my_res = [x for x in st.session_state.get('reservations', []) if x['mentor']==m_sel3]
             for r in my_res:
                 with st.expander(f"[{r['status']}] {r['date']}({WEEKS[r['date'].weekday()]}) | {r['mentee_name']}님"):
-                    col_r1, col_r2 = st.columns(2)
-                    with col_r1: st.markdown("**👤 신청자 정보**"); st.write(f"- 성함/직급: {r['mentee_name']} / {r.get('mentee_position','-')}\n- 소속/이메일: {r.get('mentee_team','-')} / {r.get('mentee_email','-')}")
-                    with col_r2: st.markdown("**⏰ 일정 및 주제**"); st.write(f"- 시간: {r['start_time']} ~ {r['end_time']}\n- 주제: {r['topic']}")
+                    c_r1, c_r2 = st.columns(2)
+                    with c_r1: st.markdown("**👤 신청자 정보**"); st.write(f"- 성함/직급: {r['mentee_name']} / {r.get('mentee_position','-')}\n- 소속/이메일: {r.get('mentee_team','-')} / {r.get('mentee_email','-')}")
+                    with c_r2: st.markdown("**⏰ 일정 및 주제**"); st.write(f"- 시간: {r['start_time']} ~ {r['end_time']}\n- 주제: {r['topic']}")
                     if r['status'] == "대기중":
                         b1, b2 = st.columns(2)
                         if b1.button("✅ 승인", key=f"ok_{r['id']}", use_container_width=True):
@@ -239,7 +252,7 @@ with tab3:
                                 send_email(r['mentee_email'], "[대한사료 멘토링] 예약 반려 안내", f"아쉽게도 {m_sel3} 멘토님이 예약을 반려하셨습니다.")
                             st.rerun()
 
-# --- [Tab 4: 관리자 메뉴 (통계, 비번변경, 멘토 리스트 완벽 복구)] ---
+# --- [Tab 4: 관리자 메뉴 (통계 및 비번변경 복구)] ---
 with tab4:
     st.subheader("👑 인사총무팀 전용 관리 시스템")
     if not st.session_state.admin_logged_in:
@@ -251,14 +264,16 @@ with tab4:
         st.markdown("### 📈 플랫폼 운영 통계")
         c_s1, c_s2, c_s3 = st.columns(3); c_s1.metric("누적 접속자", f"{st.session_state.get('visitor_count', 0)}명"); c_s2.metric("등록 멘토", f"{len(st.session_state.mentors_data)}명"); c_s3.metric("승인 건수", f"{len([r for r in st.session_state.reservations if r['status'] == '승인됨'])}건")
         st.markdown("---")
-        with st.expander("🔐 관리자 비밀번호 변경"): # [복구] 관리자 비번 변경 기능
+        with st.expander("🔐 관리자 비밀번호 변경"): # 관리자 비번 변경 기능 복구
             nad_pw = st.text_input("새 비번", type="password", key="nad_pw")
             if st.button("비번 업데이트") and nad_pw: st.session_state.admin_info['pw'] = nad_pw; safe_save("admin", [st.session_state.admin_info]); st.success("완료")
         with st.expander("👨‍🏫 멘토 신규 등록"):
             r1, r2, r3, r4 = st.columns(4); nm, np, nt, n_pw = r1.text_input("성함",key="n1"), r2.text_input("직급",key="n2"), r3.text_input("팀명",key="n3"), r4.text_input("비번",key="n4")
             e1, e2 = st.columns([1.5, 2.5]); ne, nx = e1.text_input("이메일",key="n5"), e2.text_input("전문",key="n6"); ng = st.text_area("인사말", key="n7")
-            if st.button("등록하기") and is_company_email(ne): st.session_state.mentors_data.append({"name":nm,"position":np,"team":nt,"pw":n_pw,"expertise":nx,"greeting":ng,"email":ne}); safe_save("mentors", st.session_state.mentors_data); st.rerun()
-        with st.expander("📋 기존 멘토 수정/삭제", expanded=True): # [보강] 멘토 리스트 유지보수
+            if st.button("등록하기") and is_company_email(ne):
+                st.session_state.mentors_data.append({"name":nm,"position":np,"team":nt,"pw":n_pw,"expertise":nx,"greeting":ng,"email":ne})
+                safe_save("mentors", st.session_state.mentors_data); st.rerun()
+        with st.expander("📋 기존 멘토 수정/삭제", expanded=True): # 멘토 리스트 유지보수 기능 복구
             for i, m in enumerate(st.session_state.get('mentors_data', [])):
                 st.markdown(f"**[{m['name']}] 관리**"); er1, er2, er3, er4 = st.columns(4); un, up, ut, upw = er1.text_input("성함", m['name'], key=f"un_{i}"), er2.text_input("직급", m.get('position',''), key=f"up_{i}"), er3.text_input("팀명", m.get('team',''), key=f"ut_{i}"), er4.text_input("비번", m.get('pw',''), key=f"upw_{i}")
                 e1, e2 = st.columns([1.5, 2.5]); ue, ux = e1.text_input("메일", m.get('email',''), key=f"ue_{i}"), e2.text_input("전문", m.get('expertise',''), key=f"ux_{i}"); ug = st.text_area("인사말", m.get('greeting',''), key=f"ug_{i}")
